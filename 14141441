@@ -1683,6 +1683,13 @@ do -- Library
         --
         if Options.Toggle == nil then return end
         --
+        -- Preserve existing configurations while exposing concise mode names in the UI.
+        if Options.Mode == "Always on" then
+            Options.Mode = "Always"
+        elseif Options.Mode == "On hotkey" then
+            Options.Mode = "Hold"
+        end
+        --
         local Keybind = {
             Hover = false,
             ActiveFrame = false,
@@ -1821,25 +1828,27 @@ do -- Library
             function Keybind:Toggle(Bool)
                 if Keybind.Hiding then return end
                 --
-                if Options.Toggle.State then
-                    if Bool == nil then
-                        Keybind.State = not Keybind.State
+                if Bool == nil then
+                    Keybind.State = not Keybind.State
+                else
+                    Keybind.State = Bool
+                end
+                --
+                if not Options.HideFromList then
+                    if Keybind.State then
+                        --Library:AddKeybindFrame(Keybind.Mode, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
                     else
-                        Keybind.State = Bool
+                        --Library:RemoveKeybindFrame(Options.Toggle:GetName(), Options.Toggle:GetSection())
                     end
-                    --
-                    if not Options.HideFromList then
-                        if Keybind.State then
-                            --Library:AddKeybindFrame(Keybind.Mode, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                        else
-                            --Library:RemoveKeybindFrame(Options.Toggle:GetName(), Options.Toggle:GetSection())
-                        end
-                    end
-                    --
-                    if Options.Toggle.GetFlag then
-                        Library.Flags[Options.Toggle:GetFlag()] = Keybind
-                    end
-                    --
+                end
+                --
+                if Options.Toggle.GetFlag then
+                    Library.Flags[Options.Toggle:GetFlag()] = Keybind
+                end
+                --
+                if Options.Toggle.ToggleGUI then
+                    Options.Toggle:ToggleGUI(Keybind.State)
+                elseif Options.Toggle.State then
                     Options.Toggle:GetCallback(Keybind.State)
                 end
             end
@@ -1858,33 +1867,23 @@ do -- Library
                 return (Keybind.Keybind:lower() == "[-]" and true or Keybind.State)
             end
             --
-            if Options.Mode == "Always on" then
+            if Options.Mode == "Always" then
                 Keybind:Toggle(true)
             end
             --
             function Keybind:SetMode(Mode)
+                if Mode == "Always on" then
+                    Mode = "Always"
+                elseif Mode == "On hotkey" then
+                    Mode = "Hold"
+                end
+                --
                 Keybind.Mode = Mode
                 --
-                if Mode == "Always on" then
-                    if Mode == "Always on" then
-                        Keybind:Toggle(true)
-                    end
-                    --
-                    if not Keybind.State then
-                        Keybind.State = true
-                        --
-                        --Library:AddKeybindFrame(Mode, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                    else
-                        --Library:UpdateKeybindFrame(Mode, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                    end
-                elseif Mode == "Toggle" then
-                    if Keybind.State then
-                        --Library:UpdateKeybindFrame(Mode, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                    end
-                elseif Mode == "On hotkey" then
-                    Keybind.State = false
-                    --
-                    --Library:RemoveKeybindFrame(Options.Toggle:GetName(), Options.Toggle:GetSection())
+                if Mode == "Always" then
+                    Keybind:Toggle(true)
+                elseif Mode == "Hold" and Keybind.State then
+                    Keybind:Toggle(false)
                 end
             end
             --
@@ -1987,7 +1986,7 @@ do -- Library
                     end)
                 end
                 --
-                for Index, Value in {"Always on", "On hotkey", "Toggle"} do
+                for Index, Value in {"Always", "Hold", "Toggle"} do
                     local ModeItem = {
                         Active = false,
                         Hovering = false,
@@ -2040,33 +2039,12 @@ do -- Library
                                 --
                                 ModeItem.Active = true
                                 --
-                                Keybind.Mode = Value
+                                Keybind:SetMode(Value)
                                 Keybind.CurrentMode = ModeItem
                                 --
                                 Inactive.Text = "<b>" .. Value .. "</b>"
                                 Library:TweenObject(Inactive, TweenInfo.new(Library.UI.TweenSpeed, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextColor3 = Library.Theme.Default.Accent})
                                 --
-                                if Value == "Always on" then
-                                    if Keybind.Mode == "Always on" then
-                                        Keybind:Toggle(true)
-                                    end
-                                    --
-                                    if not Keybind.State then
-                                        Keybind.State = true
-                                        --
-                                        --Library:AddKeybindFrame(Value, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                                    else
-                                        --Library:UpdateKeybindFrame(Value, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                                    end
-                                elseif Value == "Toggle" then
-                                    if Keybind.State then
-                                        --Library:UpdateKeybindFrame(Value, Options.Toggle:GetName(), Keybind.Keybind, Options.Toggle:GetSection())
-                                    end
-                                elseif Value == "On hotkey" then
-                                    Keybind.State = false
-                                    --
-                                    --Library:RemoveKeybindFrame(Options.Toggle:GetName(), Options.Toggle:GetSection())
-                                end
                             end
                         end
                         --
@@ -2204,7 +2182,7 @@ do -- Library
                 if Proccessed then return end
                 --
                 if (Input.UserInputType == Enum.UserInputType.Keyboard and Keybind.Keybind ~= "[-]" and Input.KeyCode == Keybind.RegKeybind) or (Input.UserInputType == Enum.UserInputType.MouseButton1 and Keybind.Keybind == "MB1") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and Keybind.Keybind == "MB2") or (Input.UserInputType == Enum.UserInputType.MouseButton3 and Keybind.Keybind == "MMB") then
-                    if Keybind.Mode == "Always on" then
+                    if Keybind.Mode == "Always" then
                         Keybind:Toggle(true)
                     else
                         Keybind:Toggle()
@@ -2215,7 +2193,7 @@ do -- Library
             Library:Connection(UserInputService.InputEnded, function(Input, Proccessed)
                 if Proccessed then return end
                 --
-                if Keybind.Mode == "On hotkey" then
+                if Keybind.Mode == "Hold" then
                     if (Input.UserInputType == Enum.UserInputType.Keyboard and Keybind.Keybind ~= "[-]" and Input.KeyCode == Keybind.RegKeybind) or (Input.UserInputType == Enum.UserInputType.MouseButton1 and Keybind.Keybind == "MB1") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and Keybind.Keybind == "MB2") or (Input.UserInputType == Enum.UserInputType.MouseButton3 and Keybind.Keybind == "MMB") then
                         Keybind:Toggle()
                     end
