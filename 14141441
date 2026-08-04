@@ -7053,160 +7053,186 @@ do -- Library
                 Position = "Top Left",
             }, Options or {})
             --
-            local Notification = {}
             local Path = Options.Position == "Top Left" and Library.UI.Notifications.TopLeft or Library.UI.Notifications.Middle
+            local MaxWidth = 320
+            local function GetSize(Message)
+                local PlainText = tostring(Message):gsub("<.->", "")
+                local BaseBounds = TextService:GetTextSize(PlainText, Library.UI.FontSize, Library.UI.NewFont, Vector2.new(MaxWidth - 28, 1000))
+                local Width = math.clamp(BaseBounds.X + 28, 170, MaxWidth)
+                local Bounds = TextService:GetTextSize(PlainText, Library.UI.FontSize, Library.UI.NewFont, Vector2.new(Width - 28, 1000))
+                return Width, math.max(30, Bounds.Y + 12)
+            end
             --
+            local Width, Height = GetSize(Options.Message)
             local NotificationFrameObject = Library:CreateObject("Frame", {
-                Name = "Watermark",
-                Position = UDim2.new(0, 0, 0, 0),
+                Name = "Notification",
+                Position = UDim2.fromOffset(-Width - 12, 70),
                 BorderColor3 = Color3.fromRGB(0, 0, 0),
-                Size = UDim2.new(0, 400, 0, 20),
-                BorderSizePixel = 0,
+                Size = UDim2.fromOffset(Width, Height),
+                BorderSizePixel = 1,
                 ZIndex = 10000,
-                BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+                BackgroundColor3 = Color3.fromRGB(18, 18, 18),
                 Parent = Library.UI.ScreenGUI
             }, true)
             --
-            NotificationFrameObject.BackgroundTransparency = 1
-            --
-            local UIGradient = Library:CreateObject("UIGradient", {
-                Transparency = NumberSequence.new{
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.25, 0.6119999885559082),
-                    NumberSequenceKeypoint.new(0.5, 0.625),
-                    NumberSequenceKeypoint.new(0.75, 0.625),
-                    NumberSequenceKeypoint.new(1, 1)
-                },
+            local Accent = Library:CreateObject("Frame", {
+                Name = "Accent",
+                Position = UDim2.fromOffset(1, 1),
+                Size = UDim2.new(0, 2, 1, -2),
+                BorderSizePixel = 0,
+                ZIndex = 10001,
+                BackgroundColor3 = Library.Theme.Default.Accent,
                 Parent = NotificationFrameObject
             }, true)
             --
-            local UIStroke = Library:CreateObject("UIStroke", {
-                Parent = NotificationFrameObject
-            }, true)
-            --
-            UIStroke.Transparency = 1
-            --
-            local UIGradient_1 = Library:CreateObject("UIGradient", {
-                Transparency = NumberSequence.new{
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.232, 0.4000000059604645),
-                    NumberSequenceKeypoint.new(0.5, 0.4000000059604645),
-                    NumberSequenceKeypoint.new(0.75, 0.4000000059604645),
-                    NumberSequenceKeypoint.new(1, 1)
-                },
-                Parent = UIStroke
-            }, true)
+            Library:AddTheme(Accent, {
+                BackgroundColor3 = "Accent",
+            })
             --
             local NotificationText = Library:CreateObject("TextLabel", {
-                FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-                TextColor3 = Color3.fromRGB(208, 208, 208),
-                BorderColor3 = Color3.fromRGB(0, 0, 0),
+                FontFace = Library.UI.NewFont,
+                TextColor3 = Library.Theme.Default.TextColor,
+                BorderSizePixel = 0,
                 Text = Options.Message,
                 Name = "Text",
-                Size = UDim2.new(1, 0, 1, 0),
-                ZIndex = 10000,
+                Position = UDim2.fromOffset(14, 4),
+                Size = UDim2.new(1, -22, 1, -8),
+                ZIndex = 10001,
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                BorderSizePixel = 0,
+                TextYAlignment = Enum.TextYAlignment.Center,
+                TextWrapped = true,
                 RichText = true,
-                TextSize = 14,
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                TextSize = Library.UI.FontSize,
                 Parent = NotificationFrameObject
             }, true)
             --
-            local Stroke = Library:CreateObject("UIStroke", {
-                Parent = NotificationText,
-                LineJoinMode = Enum.LineJoinMode.Miter,
-                Color = Color3.fromRGB(50, 50, 50),
+            Library:AddTheme(NotificationText, {
+                TextColor3 = "TextColor",
+            })
+            --
+            local FrameStroke = Library:CreateObject("UIStroke", {
+                Thickness = 1,
+                Color = Color3.fromRGB(55, 55, 55),
+                Transparency = 0,
+                Parent = NotificationFrameObject
             }, true)
             --
-            Stroke.Transparency = 1
-            --
-            NotificationText.TextTransparency = 1
-            --
-            local UIPadding = Library:CreateObject("UIPadding", {
-                PaddingRight = UDim.new(0, 22),
-                PaddingLeft = UDim.new(0, 22),
-                Parent = NotificationText
-            }, true)
-            --
-            local NotificationFrame = {
+            local Notification = {
                 Class = "Notification",
                 Object = NotificationFrameObject,
                 Text = NotificationText,
+                Accent = Accent,
+                Stroke = FrameStroke,
+                Width = Width,
+                Height = Height,
+                Removed = false,
             }
             --
-            NotificationFrameObject.Position = Options.Position == "Top Left" and UDim2.new(0, -70, 0, 80 + (#Path * 24)) or UDim2.new(0, Viewport.X / 2 - (NotificationText.TextBounds.X + 4) / 2, 1, -150)
+            local function GetViewport()
+                local CurrentCamera = Workspace.CurrentCamera or Camera
+                return CurrentCamera and CurrentCamera.ViewportSize or Viewport
+            end
             --
-            do -- Functions
-                function Notification:UpdatePositions()
-                    local TotalHeight = 80
-                    local Padding = 6
-                    --
-                    for Index = #Path, 1, -1 do
-                        local Value = Path[Index]
-                        local NewPosition
-                        --
-                        if Options.Position == "Top Left" then
-                            NewPosition = UDim2.new(0, 5, 0, TotalHeight)
-                            TotalHeight = TotalHeight + Value.Object.AbsoluteSize.Y + Padding
-                        else
-                            NewPosition = UDim2.new(0, Viewport.X / 2 - (Value.Text.TextBounds.X + 4) / 2, 1, -150 - (Index * 24))
-                        end
-                        --
-                        Library:TweenObject(Value.Object, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = NewPosition})
-                    end
+            local function GetExitPosition(Value)
+                local CurrentViewport = GetViewport()
+                if Options.Position == "Top Left" then
+                    return UDim2.fromOffset(-Value.Width - 12, 70)
                 end
-                --
-                function Notification:RemoveFrame()
-                    Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
-					Library:TweenObject(NotificationText, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {TextTransparency = 1})
-					Library:TweenObject(UIStroke, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Transparency = 1})
-					Library:TweenObject(Stroke, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Transparency = 1})
-                    --
-                    task.delay(0.25, function()
-                        NotificationFrameObject:Destroy()
-
-                        table.remove(Path, table.find(Path, NotificationFrame))
-
-                        Notification:UpdatePositions()
-                    end)
-                end
-                --
-                function Notification:UpdateText(Text)
-                    NotificationText.Text = Text
-                    NotificationFrameObject.Size = UDim2.new(NotificationFrameObject.Size.X.Scale, NotificationText.TextBounds.X + 44, 0, NotificationText.TextBounds.Y + 4)
-                end
-                --
-                function Notification:Update()
-                    local TotalHeight = 50
-                    local Padding = 6
-                    --
-					Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
-					Library:TweenObject(NotificationText, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {TextTransparency = 0})
-					Library:TweenObject(UIStroke, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Transparency = 0})
-					Library:TweenObject(Stroke, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Transparency = 0})
-                    NotificationFrameObject.Size = UDim2.new(NotificationFrameObject.Size.X.Scale, NotificationText.TextBounds.X + 44, 0, NotificationText.TextBounds.Y + 4)
-                    --
+                return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), CurrentViewport.Y + Value.Height + 12)
+            end
+            --
+            function Notification:UpdatePositions()
+                local CurrentViewport = GetViewport()
+                if Options.Position == "Top Left" then
+                    local Y = 70
                     for _, Value in Path do
-                        TotalHeight = TotalHeight + Value.Object.AbsoluteSize.Y + Padding
+                        Library:TweenObject(Value.Object, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            Position = UDim2.fromOffset(6, Y),
+                        })
+                        Y = Y + Value.Height + 6
                     end
-                    --
-                    local NewPosition = Options.Position == "Top Left" and UDim2.new(0, 5, 0, TotalHeight) or UDim2.new(0, Viewport.X / 2 - (NotificationText.TextBounds.X + 4) / 2, 1, -150)
-                    --
-                    Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Position = NewPosition}, function()
-                        if Options.Delay ~= math.huge then
-                            task.delay(Options.Delay, Notification.RemoveFrame)
-                        end
-                    end)
+                else
+                    local Y = CurrentViewport.Y - 54
+                    for _, Value in Path do
+                        Y = Y - Value.Height
+                        Library:TweenObject(Value.Object, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            Position = UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), Y),
+                        })
+                        Y = Y - 6
+                    end
                 end
             end
             --
-            Notification:Update()
+            function Notification:RemoveFrame()
+                if Notification.Removed then return end
+                Notification.Removed = true
+                --
+                local Index = table.find(Path, Notification)
+                if Index then
+                    table.remove(Path, Index)
+                end
+                --
+                if not NotificationFrameObject.Parent then
+                    return
+                end
+                --
+                Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    Position = GetExitPosition(Notification),
+                    BackgroundTransparency = 1,
+                })
+                Library:TweenObject(Accent, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    BackgroundTransparency = 1,
+                })
+                Library:TweenObject(NotificationText, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    TextTransparency = 1,
+                })
+                Library:TweenObject(FrameStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    Transparency = 1,
+                })
+                --
+                Notification:UpdatePositions()
+                task.delay(0.2, function()
+                    if NotificationFrameObject.Parent then
+                        NotificationFrameObject:Destroy()
+                    end
+                end)
+            end
             --
-            table.insert(Path, 1, NotificationFrame)
+            function Notification:UpdateText(Text)
+                if Notification.Removed or not NotificationFrameObject.Parent then return end
+                NotificationText.Text = tostring(Text)
+                Notification.Width, Notification.Height = GetSize(NotificationText.Text)
+                NotificationFrameObject.Size = UDim2.fromOffset(Notification.Width, Notification.Height)
+                Notification:UpdatePositions()
+            end
             --
+            NotificationFrameObject.BackgroundTransparency = 1
+            Accent.BackgroundTransparency = 1
+            NotificationText.TextTransparency = 1
+            FrameStroke.Transparency = 1
+            NotificationFrameObject.Position = GetExitPosition(Notification)
+            --
+            table.insert(Path, 1, Notification)
             Notification:UpdatePositions()
+            Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                BackgroundTransparency = 0,
+            })
+            Library:TweenObject(Accent, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                BackgroundTransparency = 0,
+            })
+            Library:TweenObject(NotificationText, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                TextTransparency = 0,
+            })
+            Library:TweenObject(FrameStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Transparency = 0,
+            })
+            --
+            if Options.Delay ~= math.huge then
+                task.delay(math.max(0, tonumber(Options.Delay) or 3), function()
+                    Notification:RemoveFrame()
+                end)
+            end
             --
             return Notification
         end
