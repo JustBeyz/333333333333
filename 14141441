@@ -1,3 +1,6 @@
+if getgenv().ThreeThirty then
+    getgenv().ThreeThirty:Unload()
+end
 if Library and Library.Unload then
     Library:Unload()
 end
@@ -340,181 +343,234 @@ do
 
         return Object
     end
+    local function CreatePanelShell(Name, Position, Size, ZIndex, Draggable)
+        local Root = Library:CreateObject("Frame", {
+            Name = Name,
+            AnchorPoint = Vector2.new(0.5, 0),
+            Active = Draggable,
+            BackgroundColor3 = Color3.fromRGB(12, 12, 12),
+            BorderSizePixel = 0,
+            Draggable = Draggable,
+            Position = Position,
+            Size = Size,
+            Visible = false,
+            ZIndex = ZIndex,
+            Parent = Library.UI.ScreenGUI,
+        })
+        local Inline = Library:CreateObject("Frame", {
+            Name = "Inline",
+            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = ZIndex + 1,
+            Parent = Root,
+        })
+        local Inner = Library:CreateObject("Frame", {
+            Name = "Inner",
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = ZIndex + 2,
+            Parent = Inline,
+        })
+        local Outline = Library:CreateObject("Frame", {
+            Name = "Outline_1",
+            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(3, 3),
+            Size = UDim2.new(1, -6, 1, -6),
+            ZIndex = ZIndex + 3,
+            Parent = Inner,
+        })
+        local PatternHolder = Library:CreateObject("Frame", {
+            Name = "PatternHolder",
+            BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = ZIndex + 4,
+            Parent = Outline,
+        })
+        Library:CreateObject("ImageLabel", {
+            Name = "Pattern",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Image = "rbxassetid://8547666218",
+            ImageColor3 = Color3.fromRGB(12, 12, 12),
+            ScaleType = Enum.ScaleType.Tile,
+            Size = UDim2.fromScale(1, 1),
+            TileSize = UDim2.fromOffset(8, 8),
+            ZIndex = ZIndex + 5,
+            Parent = PatternHolder,
+        })
+        local TopBarGradientHolder = Library:CreateObject("Frame", {
+            Name = "TopBarGradientHolder",
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 0, 4),
+            ZIndex = ZIndex + 7,
+            Parent = Outline,
+        })
+        Library:CreateObject("ImageLabel", {
+            Name = "GradientBar",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Image = "rbxassetid://8508019876",
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = ZIndex + 8,
+            Parent = TopBarGradientHolder,
+        })
+        Library:CreateObject("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 0.550000011920929),
+            }),
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 12, 12)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+            }),
+            Parent = TopBarGradientHolder,
+        })
+        local Content = Library:CreateObject("Frame", {
+            Name = "Content",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(0, 5),
+            Size = UDim2.new(1, 0, 1, -5),
+            ZIndex = ZIndex + 9,
+            Parent = PatternHolder,
+        })
+        return Root, Content
+    end
+
     function Library:CreateTargetHUD(Options)
         Options = Library:Validate({
-            Position = UDim2.new(0.5, -125, 1, -132),
-            Size = UDim2.fromOffset(250, 82),
+            Position = UDim2.new(0.5, 0, 1, -132),
+            Size = UDim2.fromOffset(260, 88),
             ShowDistance = true,
             ShowTeam = true,
         }, Options)
 
         local Proggy = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-        local MainFont = Library.UI.NewFont
-        local Root = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUD",
-            AnchorPoint = Vector2.new(0.5, 0),
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-            BorderSizePixel = 0,
-            Position = Options.Position,
-            Size = Options.Size,
-            Visible = false,
-            ZIndex = 60,
-            Parent = Library.UI.ScreenGUI,
-        })
-        local Outline = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDOutline",
-            BackgroundColor3 = Color3.fromRGB(38, 38, 38),
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(1, 1),
-            Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 61,
-            Parent = Root,
-        })
-        local Content = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDContent",
-            BackgroundColor3 = Color3.fromRGB(18, 18, 18),
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(1, 1),
-            Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 62,
-            Parent = Outline,
-        })
-        local AccentOutline = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDAccentOutline",
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(7, 6),
-            Size = UDim2.new(1, -14, 0, 5),
-            ZIndex = 63,
-            Parent = Content,
-        })
-        local Accent = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDAccent",
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(1, 1),
-            Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 64,
-            Parent = AccentOutline,
-        })
-        local AccentGradient = Library:CreateObject("UIGradient", {
-            Name = "3ThirtyTargetHUDRainbow",
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
-                ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 220, 80)),
-                ColorSequenceKeypoint.new(0.4, Color3.fromRGB(90, 255, 130)),
-                ColorSequenceKeypoint.new(0.6, Color3.fromRGB(85, 220, 255)),
-                ColorSequenceKeypoint.new(0.8, Color3.fromRGB(125, 100, 255)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 80, 190)),
-            }),
-            Parent = Accent,
-        })
+        local Root, Content = CreatePanelShell("3ThirtyTargetHUD", Options.Position, Options.Size, 60, true)
         local AvatarOutline = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDAvatarOutline",
             BackgroundColor3 = Color3.fromRGB(0, 0, 0),
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(8, 17),
-            Size = UDim2.fromOffset(48, 48),
-            ZIndex = 63,
+            Position = UDim2.fromOffset(8, 10),
+            Size = UDim2.fromOffset(50, 50),
+            ZIndex = 70,
             Parent = Content,
         })
         local AvatarBackground = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDAvatarBackground",
             BackgroundColor3 = Color3.fromRGB(34, 34, 34),
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(1, 1),
             Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 64,
+            ZIndex = 71,
             Parent = AvatarOutline,
         })
         local Avatar = Library:CreateObject("ImageLabel", {
-            Name = "3ThirtyTargetHUDAvatar",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(1, 1),
             ScaleType = Enum.ScaleType.Crop,
             Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 65,
+            ZIndex = 72,
             Parent = AvatarBackground,
         })
         local Name = Library:CreateObject("TextLabel", {
-            Name = "3ThirtyTargetHUDName",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            FontFace = MainFont,
-            Position = UDim2.fromOffset(65, 18),
-            Size = UDim2.new(1, -74, 0, 16),
+            FontFace = Library.UI.NewFont,
+            Position = UDim2.fromOffset(67, 11),
+            Size = UDim2.new(1, -76, 0, 16),
             Text = "",
             TextColor3 = Color3.fromRGB(235, 235, 235),
             TextSize = Library.UI.FontSize,
-            TextStrokeTransparency = 1,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 63,
+            ZIndex = 70,
             Parent = Content,
         })
         local Info = Library:CreateObject("TextLabel", {
-            Name = "3ThirtyTargetHUDInfo",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            FontFace = MainFont,
-            Position = UDim2.fromOffset(65, 35),
-            Size = UDim2.new(1, -74, 0, 14),
+            FontFace = Library.UI.NewFont,
+            Position = UDim2.fromOffset(67, 28),
+            Size = UDim2.new(1, -76, 0, 14),
             Text = "",
             TextColor3 = Color3.fromRGB(150, 150, 150),
             TextSize = Library.UI.FontSize,
-            TextStrokeTransparency = 1,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 63,
+            ZIndex = 70,
             Parent = Content,
         })
         local HealthOutline = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDHealthOutline",
             BackgroundColor3 = Color3.fromRGB(0, 0, 0),
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(65, 54),
-            Size = UDim2.new(1, -74, 0, 14),
-            ZIndex = 63,
+            Position = UDim2.fromOffset(67, 47),
+            Size = UDim2.new(1, -76, 0, 14),
+            ZIndex = 70,
             Parent = Content,
         })
         local HealthBackground = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDHealthBackground",
             BackgroundColor3 = Color3.fromRGB(28, 28, 28),
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(1, 1),
             Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 64,
+            ZIndex = 71,
             Parent = HealthOutline,
         })
         local Health = Library:CreateObject("Frame", {
-            Name = "3ThirtyTargetHUDHealth",
             BackgroundColor3 = Color3.fromRGB(98, 205, 98),
             BorderSizePixel = 0,
-            Size = UDim2.new(1, 0, 1, 0),
-            ZIndex = 65,
+            Size = UDim2.fromScale(1, 1),
+            ZIndex = 72,
             Parent = HealthBackground,
         })
         local Value = Library:CreateObject("TextLabel", {
-            Name = "3ThirtyTargetHUDValue",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
             FontFace = Proggy,
-            Size = UDim2.new(1, 0, 1, 0),
+            Size = UDim2.fromScale(1, 1),
             Text = "",
             TextColor3 = Color3.fromRGB(255, 255, 255),
             TextSize = 9,
             TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
             TextStrokeTransparency = 0,
-            ZIndex = 66,
+            ZIndex = 73,
             Parent = HealthOutline,
         })
 
         local HUD = {
             Frame = Root,
             Connection = nil,
+            PositionConnection = nil,
+            Hovering = false,
+            HomePosition = Options.Position,
             Options = {Distance = Options.ShowDistance, Team = Options.ShowTeam},
         }
+        function HUD:Clamp()
+            local CurrentCamera = Workspace.CurrentCamera
+            if not CurrentCamera then
+                return
+            end
+            local ViewportSize = CurrentCamera.ViewportSize
+            local AbsoluteSize = Root.AbsoluteSize
+            local AbsolutePosition = Root.AbsolutePosition
+            local X = math.clamp(AbsolutePosition.X, 0, ViewportSize.X - AbsoluteSize.X)
+            local Y = math.clamp(AbsolutePosition.Y, 0, ViewportSize.Y - AbsoluteSize.Y)
+            if math.abs(X - AbsolutePosition.X) > 0.5 or math.abs(Y - AbsolutePosition.Y) > 0.5 then
+                local Inset = GuiService:GetGuiInset()
+                Root.Position = UDim2.fromOffset(X + AbsoluteSize.X * Root.AnchorPoint.X + Inset.X, Y + AbsoluteSize.Y * Root.AnchorPoint.Y + Inset.Y)
+            end
+        end
         function HUD:SetVisible(State)
             Root.Visible = State
         end
@@ -526,11 +582,32 @@ do
                 self.Options.Team = Configuration.Team
             end
         end
+        function HUD:SetHover(State, ScreenPosition)
+            local WasHovering = self.Hovering
+            self.Hovering = State
+            Root.Active = not State
+            Root.Draggable = not State
+            if State and ScreenPosition then
+                Root.Position = UDim2.fromOffset(math.floor(ScreenPosition.X), math.floor(ScreenPosition.Y - Root.AbsoluteSize.Y - 10))
+                self:Clamp()
+            elseif not State and WasHovering then
+                Root.Position = self.HomePosition
+                self:Clamp()
+            end
+        end
+        function HUD:SetIdle(State)
+            self:SetHover(false)
+            Name.Text = "NO TARGET"
+            Info.Visible = false
+            Health.Size = UDim2.fromScale(0, 1)
+            Value.Text = ""
+            Root.Visible = State
+        end
         function HUD:Update(Target, Role, Distance)
             local Character = Target and Target.Character
             local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
             if not Humanoid or Humanoid.Health <= 0 then
-                Root.Visible = false
+                self:SetIdle(false)
                 return
             end
             local Ratio = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
@@ -553,12 +630,97 @@ do
             if self.Connection then
                 self.Connection:Disconnect()
             end
+            if self.PositionConnection then
+                self.PositionConnection:Disconnect()
+            end
             Root:Destroy()
         end
+        HUD.PositionConnection = Root:GetPropertyChangedSignal("Position"):Connect(function()
+            if not HUD.Hovering then
+                HUD.HomePosition = Root.Position
+            end
+        end)
         HUD.Connection = Library:Connection(RunService.RenderStepped, function()
-            AccentGradient.Offset = Vector2.new((os.clock() * 0.35) % 2 - 1, 0)
+            if Root.Visible and not HUD.Hovering then
+                HUD:Clamp()
+            end
         end, "Target HUD")
         return HUD
+    end
+
+    function Library:CreateServerPositionVisualizer(Options)
+        Options = Library:Validate({
+            Position = UDim2.fromOffset(138, 180),
+            Size = UDim2.fromOffset(230, 68),
+        }, Options)
+
+        local Root, Content = CreatePanelShell("3ThirtyServerPosition", Options.Position, Options.Size, 60, false)
+        local AvatarOutline = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(8, 9),
+            Size = UDim2.fromOffset(46, 46),
+            ZIndex = 70,
+            Parent = Content,
+        })
+        local AvatarBackground = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(34, 34, 34),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = 71,
+            Parent = AvatarOutline,
+        })
+        local Avatar = Library:CreateObject("ImageLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Image = "rbxthumb://type=AvatarHeadShot&id=" .. Client.UserId .. "&w=150&h=150",
+            Position = UDim2.fromOffset(1, 1),
+            ScaleType = Enum.ScaleType.Crop,
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = 72,
+            Parent = AvatarBackground,
+        })
+        local Title = Library:CreateObject("TextLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            FontFace = Library.UI.NewFont,
+            Position = UDim2.fromOffset(64, 10),
+            Size = UDim2.new(1, -72, 0, 16),
+            Text = "SERVER POSITION",
+            TextColor3 = Color3.fromRGB(235, 235, 235),
+            TextSize = Library.UI.FontSize,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 70,
+            Parent = Content,
+        })
+        local PositionLabel = Library:CreateObject("TextLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            FontFace = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+            Position = UDim2.fromOffset(64, 29),
+            Size = UDim2.new(1, -72, 0, 12),
+            Text = "X 0  Y 0  Z 0",
+            TextColor3 = Color3.fromRGB(190, 190, 190),
+            TextSize = 9,
+            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+            TextStrokeTransparency = 0,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 70,
+            Parent = Content,
+        })
+        local Visualizer = {Frame = Root}
+        function Visualizer:SetVisible(State)
+            Root.Visible = State
+        end
+        function Visualizer:Update(Position)
+            PositionLabel.Text = string.format("X %d  Y %d  Z %d", math.floor(Position.X), math.floor(Position.Y), math.floor(Position.Z))
+            Root.Visible = true
+        end
+        function Visualizer:Destroy()
+            Root:Destroy()
+        end
+        return Visualizer
     end
 
     function Library:AddTheme(Object, Properties)
