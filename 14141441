@@ -343,6 +343,13 @@ do
 
         return Object
     end
+    local function KeepVisibleWhenMenuCloses(Root)
+        Library.Objects[Root][3] = true
+        for _, Object in Root:GetDescendants() do
+            Library.Objects[Object][3] = true
+        end
+    end
+
     local function CreatePanelShell(Name, Position, Size, ZIndex, Draggable)
         local Root = Library:CreateObject("Frame", {
             Name = Name,
@@ -547,6 +554,7 @@ do
             ZIndex = 73,
             Parent = HealthOutline,
         })
+        KeepVisibleWhenMenuCloses(Root)
 
         local HUD = {
             Frame = Root,
@@ -650,25 +658,57 @@ do
 
     function Library:CreateServerPositionVisualizer(Options)
         Options = Library:Validate({
-            Position = UDim2.fromOffset(138, 180),
-            Size = UDim2.fromOffset(230, 68),
+            Size = UDim2.fromOffset(56, 56),
         }, Options)
 
-        local Root, Content = CreatePanelShell("3ThirtyServerPosition", Options.Position, Options.Size, 60, false)
+        local Root = Library:CreateObject("Frame", {
+            Name = "3ThirtyServerPosition",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = Color3.fromRGB(12, 12, 12),
+            BorderSizePixel = 0,
+            Size = Options.Size,
+            Visible = false,
+            ZIndex = 60,
+            Parent = Library.UI.ScreenGUI,
+        })
+        local Inline = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = 61,
+            Parent = Root,
+        })
+        local Inner = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            ZIndex = 62,
+            Parent = Inline,
+        })
+        local Background = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(3, 3),
+            Size = UDim2.new(1, -6, 1, -6),
+            ZIndex = 63,
+            Parent = Inner,
+        })
         local AvatarOutline = Library:CreateObject("Frame", {
             BackgroundColor3 = Color3.fromRGB(0, 0, 0),
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(8, 9),
-            Size = UDim2.fromOffset(46, 46),
-            ZIndex = 70,
-            Parent = Content,
+            Position = UDim2.fromOffset(5, 5),
+            Size = UDim2.new(1, -10, 1, -10),
+            ZIndex = 64,
+            Parent = Background,
         })
         local AvatarBackground = Library:CreateObject("Frame", {
             BackgroundColor3 = Color3.fromRGB(34, 34, 34),
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(1, 1),
             Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 71,
+            ZIndex = 65,
             Parent = AvatarOutline,
         })
         local Avatar = Library:CreateObject("ImageLabel", {
@@ -678,43 +718,27 @@ do
             Position = UDim2.fromOffset(1, 1),
             ScaleType = Enum.ScaleType.Crop,
             Size = UDim2.new(1, -2, 1, -2),
-            ZIndex = 72,
+            ZIndex = 66,
             Parent = AvatarBackground,
         })
-        local Title = Library:CreateObject("TextLabel", {
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            FontFace = Library.UI.NewFont,
-            Position = UDim2.fromOffset(64, 10),
-            Size = UDim2.new(1, -72, 0, 16),
-            Text = "SERVER POSITION",
-            TextColor3 = Color3.fromRGB(235, 235, 235),
-            TextSize = Library.UI.FontSize,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 70,
-            Parent = Content,
-        })
-        local PositionLabel = Library:CreateObject("TextLabel", {
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            FontFace = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-            Position = UDim2.fromOffset(64, 29),
-            Size = UDim2.new(1, -72, 0, 12),
-            Text = "X 0  Y 0  Z 0",
-            TextColor3 = Color3.fromRGB(190, 190, 190),
-            TextSize = 9,
-            TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
-            TextStrokeTransparency = 0,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 70,
-            Parent = Content,
-        })
+        KeepVisibleWhenMenuCloses(Root)
         local Visualizer = {Frame = Root}
         function Visualizer:SetVisible(State)
             Root.Visible = State
         end
-        function Visualizer:Update(Position)
-            PositionLabel.Text = string.format("X %d  Y %d  Z %d", math.floor(Position.X), math.floor(Position.Y), math.floor(Position.Z))
+        function Visualizer:Update(WorldPosition)
+            local CurrentCamera = Workspace.CurrentCamera
+            if not CurrentCamera then
+                Root.Visible = false
+                return
+            end
+            local ScreenPosition, OnScreen = CurrentCamera:WorldToViewportPoint(WorldPosition)
+            if not OnScreen or ScreenPosition.Z <= 0 then
+                Root.Visible = false
+                return
+            end
+            local Inset = GuiService:GetGuiInset()
+            Root.Position = UDim2.fromOffset(math.floor(ScreenPosition.X + Inset.X), math.floor(ScreenPosition.Y + Inset.Y))
             Root.Visible = true
         end
         function Visualizer:Destroy()
