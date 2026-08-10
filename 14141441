@@ -1975,7 +1975,7 @@ do
                         return
                     end
 
-                    if CurrentY ~= StartingY then
+                    if CurrentY ~= StartingY and ColorPicker.RemoveOtherFrame then
                         ColorPicker:RemoveOtherFrame(true)
                     end
 
@@ -2062,7 +2062,9 @@ do
                                     ColorPicker:Set(Options.Default, Options.Alpha)
                                 end
 
-                                ColorPicker:RemoveOtherFrame()
+                                if ColorPicker.RemoveOtherFrame then
+                                    ColorPicker:RemoveOtherFrame()
+                                end
                             end
                         end
 
