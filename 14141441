@@ -72,7 +72,30 @@ do
             NewFont = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
             FontSize = 13,
             DraggingGui = nil,
-            Notifications = {TopLeft = {}, Middle = {}},
+            Notifications = {
+                TopLeft = {},
+                TopRight = {},
+                BottomLeft = {},
+                BottomRight = {},
+                BottomCenter = {},
+                Center = {},
+            },
+            NotificationStyle = {
+                Position = "Top Left",
+                Offset = Vector2.new(6, 70),
+                Spacing = 6,
+                MinWidth = 170,
+                MaxWidth = 320,
+                TextSize = 13,
+                AnimationTime = 0.22,
+                BackgroundColor = Color3.fromRGB(18, 18, 18),
+                TextColor = Color3.fromRGB(235, 235, 235),
+                OutlineColor = Color3.fromRGB(55, 55, 55),
+                BackgroundTransparency = 0,
+                OutlineTransparency = 0,
+                StackLimit = 8,
+                ClickToDismiss = true,
+            },
             Unloaded = false,
             TextMeasureCache = {},
             Keys = {
@@ -7542,19 +7565,47 @@ do
         end
 
         function Library:Notify(Options)
-            Options = Library:Validate({
-                Message = "Notification",
-                Delay = 3,
-                Position = "Top Left",
-            }, Options or {})
+            local Style = {}
+            for Key, Value in Library.UI.NotificationStyle do
+                Style[Key] = Value
+            end
+            for Key, Value in Options or {} do
+                Style[Key] = Value
+            end
+            Options = Style
+            Options.Message = Options.Message or "Notification"
+            Options.Delay = Options.Delay == nil and 3 or Options.Delay
+            Options.AccentColor = Options.AccentColor or Library.Theme.Default.Accent
+            Options.FontFace = Options.FontFace or Library.UI.NewFont
 
-            local Path = Options.Position == "Top Left" and Library.UI.Notifications.TopLeft or Library.UI.Notifications.Middle
-            local MaxWidth = 320
+            local PositionKeys = {
+                ["Top Left"] = "TopLeft",
+                ["Top Right"] = "TopRight",
+                ["Bottom Left"] = "BottomLeft",
+                ["Bottom Right"] = "BottomRight",
+                ["Bottom Center"] = "BottomCenter",
+                ["Middle"] = "BottomCenter",
+                ["Center"] = "Center",
+            }
+            local PositionKey = PositionKeys[Options.Position] or "TopLeft"
+            Options.Position = Options.Position == "Middle" and "Bottom Center" or (PositionKeys[Options.Position] and Options.Position or "Top Left")
+            local Path = Library.UI.Notifications[PositionKey]
+
             local function GetSize(Message)
                 local PlainText = tostring(Message):gsub("<.->", "")
-                local BaseBounds = TextService:GetTextSize(PlainText, Library.UI.FontSize, Library.UI.NewFont, Vector2.new(MaxWidth - 28, 1000))
-                local Width = math.clamp(BaseBounds.X + 28, 170, MaxWidth)
-                local Bounds = TextService:GetTextSize(PlainText, Library.UI.FontSize, Library.UI.NewFont, Vector2.new(Width - 28, 1000))
+                local function Measure(Width)
+                    local Parameters = Instance.new("GetTextBoundsParams")
+                    Parameters.Text = PlainText
+                    Parameters.Font = Options.FontFace
+                    Parameters.Size = Options.TextSize
+                    Parameters.Width = Width
+                    local Success, Bounds = pcall(TextService.GetTextBoundsAsync, TextService, Parameters)
+                    Parameters:Destroy()
+                    return if Success then Bounds else TextService:GetTextSize(PlainText, Options.TextSize, Enum.Font.SourceSans, Vector2.new(Width, 1000))
+                end
+                local BaseBounds = Measure(Options.MaxWidth - 28)
+                local Width = math.clamp(BaseBounds.X + 28, Options.MinWidth, Options.MaxWidth)
+                local Bounds = Measure(Width - 28)
                 return Width, math.max(30, Bounds.Y + 12)
             end
 
@@ -7562,11 +7613,11 @@ do
             local NotificationFrameObject = Library:CreateObject("Frame", {
                 Name = "Notification",
                 Position = UDim2.fromOffset(-Width - 12, 70),
-                BorderColor3 = Color3.fromRGB(0, 0, 0),
                 Size = UDim2.fromOffset(Width, Height),
-                BorderSizePixel = 1,
+                BorderSizePixel = 0,
                 ZIndex = 10000,
-                BackgroundColor3 = Color3.fromRGB(18, 18, 18),
+                BackgroundColor3 = Options.BackgroundColor,
+                Active = Options.ClickToDismiss,
                 Parent = Library.UI.ScreenGUI
             }, true)
 
@@ -7576,17 +7627,13 @@ do
                 Size = UDim2.new(0, 2, 1, -2),
                 BorderSizePixel = 0,
                 ZIndex = 10001,
-                BackgroundColor3 = Library.Theme.Default.Accent,
+                BackgroundColor3 = Options.AccentColor,
                 Parent = NotificationFrameObject
             }, true)
 
-            Library:AddTheme(Accent, {
-                BackgroundColor3 = "Accent",
-            })
-
             local NotificationText = Library:CreateObject("TextLabel", {
-                FontFace = Library.UI.NewFont,
-                TextColor3 = Library.Theme.Default.TextColor,
+                FontFace = Options.FontFace,
+                TextColor3 = Options.TextColor,
                 BorderSizePixel = 0,
                 Text = Options.Message,
                 Name = "Text",
@@ -7598,18 +7645,14 @@ do
                 TextYAlignment = Enum.TextYAlignment.Center,
                 TextWrapped = true,
                 RichText = true,
-                TextSize = Library.UI.FontSize,
+                TextSize = Options.TextSize,
                 Parent = NotificationFrameObject
             }, true)
 
-            Library:AddTheme(NotificationText, {
-                TextColor3 = "TextColor",
-            })
-
             local FrameStroke = Library:CreateObject("UIStroke", {
                 Thickness = 1,
-                Color = Color3.fromRGB(55, 55, 55),
-                Transparency = 0,
+                Color = Options.OutlineColor,
+                Transparency = Options.OutlineTransparency,
                 Parent = NotificationFrameObject
             }, true)
 
@@ -7621,6 +7664,8 @@ do
                 Stroke = FrameStroke,
                 Width = Width,
                 Height = Height,
+                Options = Options,
+                Progress = nil,
                 Removed = false,
             }
 
@@ -7631,30 +7676,48 @@ do
 
             local function GetExitPosition(Value)
                 local CurrentViewport = GetViewport()
-                if Options.Position == "Top Left" then
-                    return UDim2.fromOffset(-Value.Width - 12, 70)
+                if Options.Position:find("Left") then
+                    return UDim2.fromOffset(-Value.Width - 12, Value.Object.Position.Y.Offset)
+                elseif Options.Position:find("Right") then
+                    return UDim2.fromOffset(CurrentViewport.X + 12, Value.Object.Position.Y.Offset)
+                elseif Options.Position == "Bottom Center" then
+                    return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), CurrentViewport.Y + Value.Height + 12)
                 end
-                return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), CurrentViewport.Y + Value.Height + 12)
+                return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), -Value.Height - 12)
             end
 
             function Notification:UpdatePositions()
                 local CurrentViewport = GetViewport()
-                if Options.Position == "Top Left" then
-                    local Y = 70
+                local Offset = Options.Offset
+                local IsBottom = Options.Position:find("Bottom") ~= nil
+                local IsRight = Options.Position:find("Right") ~= nil
+                local IsCenter = Options.Position == "Bottom Center" or Options.Position == "Center"
+                local Y = if IsBottom then CurrentViewport.Y - Offset.Y else Offset.Y
+
+                if Options.Position == "Center" then
+                    local Total = -Options.Spacing
                     for _, Value in Path do
-                        Library:TweenObject(Value.Object, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Position = UDim2.fromOffset(6, Y),
-                        })
-                        Y = Y + Value.Height + 6
+                        Total += Value.Height + Options.Spacing
                     end
-                else
-                    local Y = CurrentViewport.Y - 54
-                    for _, Value in Path do
-                        Y = Y - Value.Height
-                        Library:TweenObject(Value.Object, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Position = UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), Y),
-                        })
-                        Y = Y - 6
+                    Y = math.floor(CurrentViewport.Y * 0.5 - Total * 0.5)
+                end
+
+                for _, Value in Path do
+                    if IsBottom then
+                        Y -= Value.Height
+                    end
+                    local X = if IsCenter
+                        then math.floor(CurrentViewport.X / 2 - Value.Width / 2)
+                        elseif IsRight
+                        then CurrentViewport.X - Offset.X - Value.Width
+                        else Offset.X
+                    Library:TweenObject(Value.Object, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                        Position = UDim2.fromOffset(X, Y),
+                    })
+                    if IsBottom then
+                        Y -= Options.Spacing
+                    else
+                        Y += Value.Height + Options.Spacing
                     end
                 end
             end
@@ -7672,22 +7735,23 @@ do
                     return
                 end
 
-                Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                local FadeTime = math.min(Options.AnimationTime, 0.18)
+                Library:TweenObject(NotificationFrameObject, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
                     Position = GetExitPosition(Notification),
                     BackgroundTransparency = 1,
                 })
-                Library:TweenObject(Accent, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                Library:TweenObject(Accent, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
                     BackgroundTransparency = 1,
                 })
-                Library:TweenObject(NotificationText, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                Library:TweenObject(NotificationText, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
                     TextTransparency = 1,
                 })
-                Library:TweenObject(FrameStroke, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                Library:TweenObject(FrameStroke, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
                     Transparency = 1,
                 })
 
                 Notification:UpdatePositions()
-                task.delay(0.2, function()
+                task.delay(FadeTime + 0.02, function()
                     if NotificationFrameObject.Parent then
                         NotificationFrameObject:Destroy()
                     end
@@ -7702,6 +7766,44 @@ do
                 Notification:UpdatePositions()
             end
 
+            function Notification:UpdateStyle(NewStyle)
+                if Notification.Removed then return end
+                for Key, Value in NewStyle do
+                    Options[Key] = Value
+                end
+                NotificationFrameObject.BackgroundColor3 = Options.BackgroundColor
+                NotificationFrameObject.BackgroundTransparency = Options.BackgroundTransparency
+                NotificationText.TextColor3 = Options.TextColor
+                NotificationText.TextSize = Options.TextSize
+                NotificationText.FontFace = Options.FontFace
+                Accent.BackgroundColor3 = Options.AccentColor
+                FrameStroke.Color = Options.OutlineColor
+                FrameStroke.Transparency = Options.OutlineTransparency
+                Notification.Width, Notification.Height = GetSize(NotificationText.Text)
+                NotificationFrameObject.Size = UDim2.fromOffset(Notification.Width, Notification.Height)
+                Notification:UpdatePositions()
+            end
+
+            function Notification:SetProgress(Value, Color)
+                if Notification.Removed then return end
+                if not Notification.Progress then
+                    Notification.Progress = Library:CreateObject("Frame", {
+                        Name = "Progress",
+                        AnchorPoint = Vector2.new(0, 1),
+                        Position = UDim2.fromScale(0, 1),
+                        Size = UDim2.fromScale(1, 0.06),
+                        BorderSizePixel = 0,
+                        ZIndex = 10002,
+                        BackgroundColor3 = Color or Options.AccentColor,
+                        Parent = NotificationFrameObject,
+                    }, true)
+                end
+                Notification.Progress.BackgroundColor3 = Color or Notification.Progress.BackgroundColor3
+                Notification.Progress.Size = UDim2.new(math.clamp(tonumber(Value) or 0, 0, 1), 0, 0, 2)
+            end
+
+            Notification.Dismiss = Notification.RemoveFrame
+
             NotificationFrameObject.BackgroundTransparency = 1
             Accent.BackgroundTransparency = 1
             NotificationText.TextTransparency = 1
@@ -7709,19 +7811,30 @@ do
             NotificationFrameObject.Position = GetExitPosition(Notification)
 
             table.insert(Path, 1, Notification)
+            while #Path > Options.StackLimit do
+                Path[#Path]:RemoveFrame()
+            end
             Notification:UpdatePositions()
-            Library:TweenObject(NotificationFrameObject, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Library:TweenObject(NotificationFrameObject, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                BackgroundTransparency = Options.BackgroundTransparency,
+            })
+            Library:TweenObject(Accent, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                 BackgroundTransparency = 0,
             })
-            Library:TweenObject(Accent, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                BackgroundTransparency = 0,
-            })
-            Library:TweenObject(NotificationText, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Library:TweenObject(NotificationText, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                 TextTransparency = 0,
             })
-            Library:TweenObject(FrameStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                Transparency = 0,
+            Library:TweenObject(FrameStroke, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Transparency = Options.OutlineTransparency,
             })
+
+            if Options.ClickToDismiss then
+                Library:Connection(NotificationFrameObject.InputBegan, function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        Notification:RemoveFrame()
+                    end
+                end, "Notification dismiss")
+            end
 
             if Options.Delay ~= math.huge then
                 task.delay(math.max(0, tonumber(Options.Delay) or 3), function()
@@ -7730,6 +7843,32 @@ do
             end
 
             return Notification
+        end
+
+        function Library:SetNotificationStyle(Options)
+            for Key, Value in Options or {} do
+                Library.UI.NotificationStyle[Key] = Value
+            end
+        end
+
+        function Library:ClearNotifications(Position)
+            local Keys = {
+                ["Top Left"] = "TopLeft",
+                ["Top Right"] = "TopRight",
+                ["Bottom Left"] = "BottomLeft",
+                ["Bottom Right"] = "BottomRight",
+                ["Bottom Center"] = "BottomCenter",
+                ["Middle"] = "BottomCenter",
+                ["Center"] = "Center",
+            }
+            for Key, Path in Library.UI.Notifications do
+                if not Position or Keys[Position] == Key then
+                    local Copy = table.clone(Path)
+                    for _, Notification in Copy do
+                        Notification:RemoveFrame()
+                    end
+                end
+            end
         end
 
         function Library:Init()
