@@ -47,7 +47,7 @@ do
         Folder = "3thirty",
         ConfigFolder = "3thirty/Configs",
         UI = {
-            Name = "gamesnooze",
+            Name = "3thirty",
             CloseBind = Enum.KeyCode.Insert,
             SectionResizeIncrements = 1,
             WatermarkRefreshRate = 1,
@@ -1132,6 +1132,7 @@ do
         end)
 
         Library:Connection(DragFrame.InputBegan, function(Input)
+            if not Input then return end
             if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                 Dragging = true
                 MouseLocation = UserInputService:GetMouseLocation()
@@ -1176,6 +1177,7 @@ do
         end)
 
         Library:Connection(UserInputService.InputEnded, function(Input)
+            if not Input then return end
             if Input.UserInputType == Enum.UserInputType.MouseButton1 and Dragging then
                 if NewMouse then NewMouse:Destroy() NewMouse = nil end
 
@@ -1776,6 +1778,7 @@ do
 
                 do
                     Library:Connection(Button_91.InputBegan, function(Input)
+                        if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             Library.UI.DraggingGui = MainPickerColor
 
@@ -1787,6 +1790,7 @@ do
                     end)
 
                     Library:Connection(Button_915241.InputBegan, function(Input)
+                        if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             Library.UI.DraggingGui = SaturationColor
 
@@ -1800,6 +1804,7 @@ do
                     end)
 
                     Library:Connection(Button_9141.InputBegan, function(Input)
+                        if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             Library.UI.DraggingGui = BackImage_2
 
@@ -1811,6 +1816,7 @@ do
                     end)
 
                     Library:Connection(UserInputService.InputChanged, function(Input)
+                        if not Input then return end
                         if (Library.UI.DraggingGui ~= SaturationColor and Library.UI.DraggingGui ~= MainPickerColor and Library.UI.DraggingGui ~= BackImage_2) then return end
 
                         if not (UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) then
@@ -2658,6 +2664,7 @@ do
                 Library:TweenObject(KeybindObject, TweenInfo.new(Library.UI.TweenSpeed, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextColor3 = Color3.fromRGB(255, 0, 0)})
 
                 Keybind.Connection = Library:Connection(UserInputService.InputBegan, function(Input)
+                    if not Input then return end
                     Keybind:Set(Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode or Input.UserInputType)
 
                     if Keybind.Connection then
@@ -2672,6 +2679,7 @@ do
             end)
 
             Library:Connection(UserInputService.InputBegan, function(Input, Proccessed)
+                if not Input then return end
                 if Proccessed then return end
 
                 if (Input.UserInputType == Enum.UserInputType.Keyboard and Keybind.Keybind ~= "[-]" and Input.KeyCode == Keybind.RegKeybind) or (Input.UserInputType == Enum.UserInputType.MouseButton1 and Keybind.Keybind == "MB1") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and Keybind.Keybind == "MB2") or (Input.UserInputType == Enum.UserInputType.MouseButton3 and Keybind.Keybind == "MMB") then
@@ -2684,6 +2692,7 @@ do
             end)
 
             Library:Connection(UserInputService.InputEnded, function(Input, Proccessed)
+                if not Input then return end
                 if Proccessed then return end
 
                 if Keybind.Mode == "Hold" then
@@ -4050,6 +4059,7 @@ do
             end)
 
             Library:Connection(UserInputService.InputChanged, function(Input)
+                if not Input then return end
                 if Library.UI.Faded then return end
 
                 if Library.UI.DraggingGui ~= SliderDrag and not (UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)) then
@@ -4062,6 +4072,7 @@ do
             end)
 
             Library:Connection(UserInputService.InputEnded, function(Input)
+                if not Input then return end
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                     Slider.MouseDown = false
                     if Library.UI.DraggingGui == SliderDrag then
@@ -5341,6 +5352,7 @@ do
             end)
 
             Library:Connection(UserInputService.InputEnded, function(Input)
+                if not Input then return end
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 and Button.MouseDown and not Button.WaitingForConfirm then
                     Button.Hovering = false
                     Button.MouseDown = false
@@ -5377,7 +5389,7 @@ do
 
     function Library:Window(Options)
         Options = Library:Validate({
-            Name = "gamesnooze",
+            Name = "3thirty",
             Size = UDim2.new(0, 700, 0, 612),
             MinResize = UDim2.new(0, 500, 0, 400),
             MaxResize = UDim2.new(0, 10000, 0, 10000),
@@ -5595,6 +5607,7 @@ do
 
         do
             Library:Connection(UserInputService.InputBegan, function(Input)
+                if not Input then return end
                 if Input.KeyCode == Library.UI.CloseBind then
                     Window.Visible = not Window.Visible
 
@@ -6352,6 +6365,7 @@ do
                             Title.TextColor3 = Library.Theme.Default.Accent
 
                             Section.DragConnection = Library:Connection(UserInputService.InputChanged, function(Input)
+                                if not Input then return end
                                 if Input.UserInputType == Enum.UserInputType.MouseMovement then
                                     local SelectedOptions = {["SubSection"] = Options.ParentOptions, ["Other"] = {Left, Right}}
                                     local Selected = Tab.SubSectionEnabled and "SubSection" or "Other"
@@ -6400,6 +6414,7 @@ do
                         end)
 
                         Library:Connection(UserInputService.InputBegan, function(Input)
+                            if not Input then return end
                             if Input.UserInputType == Enum.UserInputType.MouseButton1 and Section.SizeButton and not Section.Hovering then
                                 Library:Fade(false, Library:GetObjectsTable(Section.SizeButton, true), Section.SizeButton, 0.1)
 
@@ -6418,6 +6433,7 @@ do
                     end
 
                     Library:Connection(UserInputService.InputEnded, function(Input)
+                        if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             if Section.DragConnection then Section.DragConnection:Disconnect() Section.DragConnection = nil end
                             Section.Left.Order = 1
@@ -7503,7 +7519,7 @@ do
 
             local R, G, B = Library.Theme.Default.Accent.R * 255, Library.Theme.Default.Accent.G * 255, Library.Theme.Default.Accent.B * 255
 
-            Library:UpdateWatermark(("game<font color='rgb(%d, %d, %d)'>snooze</font>  <font color='rgb(%d, %d, %d)'>%s</font> <font size='10'>FPS</font>  %s"):format(R, G, B, R, G, B, "60", os.date("%X")))
+            Library:UpdateWatermark(("<font color='rgb(%d, %d, %d)'>3thirty</font>  <font color='rgb(%d, %d, %d)'>%s</font> <font size='10'>FPS</font>  %s"):format(R, G, B, R, G, B, "60", os.date("%X")))
 
             do
                 Library:Connection(RunService.PostSimulation, function()
@@ -7514,7 +7530,7 @@ do
                         Watermark.Tick = tick()
 
                         if (tick() - Watermark.RefreshTick) > Library.UI.WatermarkRefreshRate then
-                            Library:UpdateWatermark(("game<font color='rgb(%d, %d, %d)'>snooze</font>  <font color='rgb(%d, %d, %d)'>%s</font> <font size='10'>FPS</font>  %s"):format(R, G, B, R, G, B, FPS, os.date("%X")))
+                            Library:UpdateWatermark(("<font color='rgb(%d, %d, %d)'>3thirty</font>  <font color='rgb(%d, %d, %d)'>%s</font> <font size='10'>FPS</font>  %s"):format(R, G, B, R, G, B, FPS, os.date("%X")))
 
                             Watermark.RefreshTick = tick()
                         end
