@@ -2757,6 +2757,7 @@ do
             Value = {},
             SelectedOrder = {},
             AllItems = {},
+            Batching = false,
         }
 
         Library.Flags[Options.Flag] = MultiBox
@@ -2918,22 +2919,26 @@ do
         do
             function MultiBox:Set(Values)
                 Values = typeof(Values) == "table" and Values or {}
+                local Selected = {}
+                for _, Value in Values do
+                    Selected[Value] = true
+                end
+
+                MultiBox.Batching = true
                 for Index, Item in MultiBox.AllItems do
-                    local ShouldBeActive = table.find(Values, Index) ~= nil
+                    local ShouldBeActive = Selected[Index] == true
                     if MultiBox.Items[Index] ~= ShouldBeActive then
-                        Item:Toggle()
+                        if ShouldBeActive then
+                            Item:Activate()
+                        else
+                            Item:Deactivate()
+                        end
                     end
                 end
-
-                if Library.UI.CurrentSelectedKeybindMode and Library.UI.CurrentSelectedKeybindMode.Keybind == Keybind then
-                    Library.UI.CurrentSelectedKeybindMode = nil
-                end
-                Keybind.ActiveFrame = false
-
-                if Library.UI.CurrentSelectedColorPickerExtra and Library.UI.CurrentSelectedColorPickerExtra.ColorPicker == ColorPicker then
-                    Library.UI.CurrentSelectedColorPickerExtra = nil
-                end
-                ColorPicker.ActiveFrame = false
+                MultiBox.Batching = false
+                MultiBox:UpdateValue()
+                Library.Flags[Options.Flag] = MultiBox
+                Options.Callback(MultiBox.Value)
             end
 
             function MultiBox:Get()
@@ -3049,8 +3054,10 @@ do
                             MultiBox.CurrentItem = Item
                             MultiBox.Items[Value] = true
                             Library.Flags[Options.Flag] = MultiBox
-                            Options.Callback(MultiBox.Value)
                             Item:SelectItem(Value)
+                            if not MultiBox.Batching then
+                                Options.Callback(MultiBox.Value)
+                            end
 
                             Inactive.Text = "<b>" .. Value .. "</b>"
                             Library:TweenObject(Inactive, TweenInfo.new(Library.UI.TweenSpeed, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextColor3 = Library.Theme.Default.Accent})
@@ -3067,8 +3074,10 @@ do
                             MultiBox.CurrentItem = nil
                             Library.Flags[Options.Flag] = MultiBox
                             MultiBox.Items[Value] = false
-                            Options.Callback(MultiBox.Value)
                             Item:DeselectItem(Value)
+                            if not MultiBox.Batching then
+                                Options.Callback(MultiBox.Value)
+                            end
 
                             Inactive.Text = Value
                             Library:TweenObject(Inactive, TweenInfo.new(Library.UI.TweenSpeed, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {TextColor3 = Color3.fromRGB(205, 205, 205)})
@@ -5654,14 +5663,17 @@ do
                 Index = Library.UI.TabIndex + 1,
                 SubSectionEnabled = false,
                 DropdownSectionEnabled = false,
+                LayoutDirty = true,
                 Position = "Bottom",
                 Sides = {
                     Left = {
                         Sections = {},
+                        AutoSections = {},
                         Sizes = 0,
                     },
                     Right = {
                         Sections = {},
+                        AutoSections = {},
                         Sizes = 0,
                     }
                 }
@@ -5820,6 +5832,77 @@ do
                 Parent = Right
             })
 
+            function Tab:UpdateSectionLayout(Side)
+                local parent = Side == "Left" and Left or Right
+                local sections = {}
+                local fixedHeight = 0
+                local autoCount = 0
+
+                for _, side in Tab.Sides do
+                    for _, section in side.AutoSections do
+                        local outline = section.Outline
+                        if outline.Parent == parent and outline.Visible then
+                            sections[#sections + 1] = section
+                        if section.AutoSize and not section.Section.ManualSize then
+                            autoCount += 1
+                        else
+                            fixedHeight += outline.AbsoluteSize.Y
+                            end
+                        end
+                    end
+                end
+
+                if autoCount == 0 then
+                    return
+                end
+
+                local available = math.max(0, parent.AbsoluteSize.Y - 38 - math.max(0, #sections - 1) * 19 - fixedHeight)
+                local height = math.max(50, math.floor(available / autoCount))
+                local remainder = math.max(0, available - height * autoCount)
+
+                for _, section in sections do
+                    if section.AutoSize then
+                        local sectionHeight = height
+                        if remainder > 0 then
+                            sectionHeight += 1
+                            remainder -= 1
+                        end
+                        local size = UDim2.new(1, 0, 0, sectionHeight)
+                        if section.Outline.Size ~= size then
+                            section.Outline.Size = size
+                        end
+                    end
+                end
+            end
+
+            function Tab:QueueSectionLayout()
+                Tab.LayoutDirty = true
+            end
+
+            Library:Connection(Left:GetPropertyChangedSignal("AbsoluteSize"), function()
+                Tab:QueueSectionLayout()
+            end)
+            Library:Connection(Right:GetPropertyChangedSignal("AbsoluteSize"), function()
+                Tab:QueueSectionLayout()
+            end)
+            Library:Connection(SectionsHolder:GetPropertyChangedSignal("AbsoluteSize"), function()
+                Tab:QueueSectionLayout()
+            end)
+            Library:Connection(UIListLayout12:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+                Tab:QueueSectionLayout()
+            end)
+            Library:Connection(UIListLayout52:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+                Tab:QueueSectionLayout()
+            end)
+            Library:Connection(RunService.PreRender, function()
+                if not Tab.LayoutDirty then
+                    return
+                end
+                Tab.LayoutDirty = false
+                Tab:UpdateSectionLayout("Left")
+                Tab:UpdateSectionLayout("Right")
+            end)
+
             local SectionsHolder2 = Library:CreateObject("Frame", {
                 Name = "SectionsHolder",
                 BackgroundTransparency = 1,
@@ -5955,6 +6038,7 @@ do
                     Name = "Preview Section",
                     Side = "Left",
                     Fill = false,
+                    AutoSize = nil,
                     Size = 40,
                     ParentOptions = {},
                     Icon = nil,
@@ -5966,6 +6050,7 @@ do
                     SizeButton = nil,
                     Hovering = false,
                     DragConnection = nil,
+                    ManualSize = false,
                     Left = {
                         Order = 1,
                     },
@@ -5976,12 +6061,14 @@ do
 
                 local Parent = Options.Side == "Left" and Left or Right
                 local SectionHeight = typeof(Options.Size) == "UDim2" and Options.Size.Y.Offset or tonumber(Options.Size) or 40
+                local AutoSize = Options.AutoSize == nil and Options.Fill or Options.AutoSize
+                Section.AutoSize = AutoSize
 
                 local SectionOutline = Library:CreateObject("Frame", {
                     Name = "SectionOutline",
                     BorderColor3 = Color3.fromRGB(0, 0, 0),
                     Size = UDim2.new(1, 0, 0, SectionHeight),
-                    AutomaticSize = Options.Fill and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
+                    AutomaticSize = AutoSize and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
                     BorderSizePixel = 0,
                     ZIndex = 1,
                     BackgroundColor3 = Color3.fromRGB(12, 12, 12),
@@ -5989,18 +6076,16 @@ do
                 })
 
                 table.insert(Tab.Sides[Options.Side].Sections, SectionOutline)
+                table.insert(Tab.Sides[Options.Side].AutoSections, {
+                    Outline = SectionOutline,
+                    AutoSize = AutoSize,
+                    Section = Section,
+                })
 
-                task.delay(0.01, function()
-                    if Options.Fill == false then
-                        Tab.Sides[Options.Side].Sizes += SectionOutline.AbsoluteSize.Y + 19
-                    end
-
-                    if Options.Fill then
-                        SectionOutline.Size = UDim2.new(1, 0, 1, -(Tab.Sides[Options.Side].Sizes))
-                    else
-                        SectionOutline.Size = UDim2.new(1, 0, 0, SectionHeight)
-                    end
-                end)
+                if Options.Fill == false then
+                    Tab.Sides[Options.Side].Sizes += SectionOutline.AbsoluteSize.Y + 19
+                end
+                Tab:QueueSectionLayout()
 
                 local SectionInline = Library:CreateObject("Frame", {
                     Name = "SectionInline",
@@ -6213,7 +6298,7 @@ do
                         end
                     end
 
-                    function Section:CalculateHeight(Section, Container)
+                    function Section:CalculateHeight(_, Container)
                         local Padding = 10
                         local Height = 0
 
@@ -6224,6 +6309,7 @@ do
                         end
 
                         Section.Size = UDim2.new(Section.Size.X.Scale, Section.Size.X.Offset, 0, math.clamp(Height + 31, 50, SectionOutline.Parent.AbsoluteSize.Y))
+                        Tab:QueueSectionLayout()
                     end
 
                     function Section:CalculateButton(Position)
@@ -6336,31 +6422,8 @@ do
 
                     Library:Connection(SectionOutline:GetPropertyChangedSignal("AbsoluteSize"), function()
                         Section:UpdateSection()
-                    end)
-
-                    Library:Connection(RunService.PreRender, function()
-                        if SectionOutline.AbsoluteSize.Y >= ((SectionOutline.Parent.AbsoluteSize.Y - Tab.Sides[Options.Side].Sizes) - 38) then
-                            if Tab.SubSectionEnabled then
-                                if #Tab.Sides[Options.Side].Sections <= 3 then
-                                    SectionOutline.Size = UDim2.new(1, 0, 1, -Tab.Sides[Options.Side].Sizes)
-                                end
-                            else
-                                SectionOutline.Size = UDim2.new(1, 0, 1, -Tab.Sides[Options.Side].Sizes)
-                            end
-                        end
-
-                        for _, Child in SectionOutline.Parent:GetChildren() do
-                            if Child:IsA("Frame") and Child ~= SectionOutline then
-                                if Library:CheckFrameFirst(SectionOutline, Child) then
-                                    if Child.AbsoluteSize.Y >= ((Child.Parent.AbsoluteSize.Y - Tab.Sides[Options.Side].Sizes) - 38) then
-                                        Child.Size = UDim2.new(Child.Size.X.Scale, Child.Size.X.Offset, 0, math.max(50, (SectionOutline.Parent.AbsoluteSize.Y - SectionOutline.AbsoluteSize.Y) - 57))
-                                    end
-
-                                    if Child.AbsoluteSize.Y == 50 and (SectionOutline.AbsoluteSize.Y == SectionOutline.Parent.AbsoluteSize.Y - 107) then
-                                        SectionOutline.Size = UDim2.new(SectionOutline.Size.X.Scale, SectionOutline.Size.X.Offset, 0, SectionOutline.Parent.AbsoluteSize.Y - 107)
-                                    end
-                                end
-                            end
+                        if Section.ManualSize then
+                            Tab:QueueSectionLayout()
                         end
                     end)
 
@@ -6402,6 +6465,7 @@ do
                                     if not Parent2 then return end
 
                                     SectionOutline.Parent = Parent2
+                                    Tab:QueueSectionLayout()
 
                                     for _, SectionChild in Parent2:GetChildren() do
                                         if SectionChild:IsA("Frame") and SectionChild.Visible then
@@ -6431,9 +6495,11 @@ do
                             Section:CalculateButton(UDim2.fromOffset(ResizableButton_6.AbsolutePosition.X + ResizableButton_6.AbsoluteSize.X + 4, ResizableButton_6.AbsolutePosition.Y + ResizableButton_6.AbsoluteSize.Y + GuiService:GetGuiInset().Y))
                         end)
 
-                        Library:Connection(ResizableButton_6.MouseButton1Down, function()
-                            ResizableButton_6.ImageColor3 = Library.Theme.Default.Accent
-                            SectionInline.BackgroundColor3 = Library.Theme.Default.Accent
+                    Library:Connection(ResizableButton_6.MouseButton1Down, function()
+                        Section.ManualSize = Section.AutoSize
+                        Tab:QueueSectionLayout()
+                        ResizableButton_6.ImageColor3 = Library.Theme.Default.Accent
+                        SectionInline.BackgroundColor3 = Library.Theme.Default.Accent
 
                             SectionOutline.Size = UDim2.new(SectionOutline.Size.X.Scale, SectionOutline.Size.X.Offset, 0, SectionOutline.AbsoluteSize.Y)
                         end)
@@ -6461,6 +6527,7 @@ do
                         if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             if Section.DragConnection then Section.DragConnection:Disconnect() Section.DragConnection = nil end
+                            Tab:QueueSectionLayout()
                             Section.Left.Order = 1
                             Section.Right.Order = 1
                             Title.TextColor3 = Color3.fromRGB(198, 198, 198)
