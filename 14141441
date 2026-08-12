@@ -1,8 +1,8 @@
 if getgenv().ThreeThirty then
-    getgenv().ThreeThirty:Unload()
+    pcall(getgenv().ThreeThirty.Unload, getgenv().ThreeThirty)
 end
 if Library and Library.Unload then
-    Library:Unload()
+    pcall(Library.Unload, Library)
 end
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
@@ -21,14 +21,19 @@ local GuiService = game:GetService("GuiService")
 local Client = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildWhichIsA("Camera")
 local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
-do
-    if not isfolder("3thirty") then
-        makefolder("3thirty")
-    end
+local keybindFont = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+local keybindTitleFont = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 
-    if not isfolder("3thirty/Configs") then
-        makefolder("3thirty/Configs")
+local function EnsureFolder(Path)
+    local Current = ""
+    for Part in tostring(Path):gmatch("[^/]+") do
+        Current = Current == "" and Part or Current .. "/" .. Part
+        pcall(makefolder, Current)
     end
+end
+
+do
+    EnsureFolder("3thirty/Configs")
 end
 do
     getgenv().Library = {
@@ -37,6 +42,7 @@ do
         Tweens = {},
         Objects = {},
         Sections = {},
+        Keybinds = {},
         ThemeSections = {},
         Flags = {},
         UnnamedFlags = 0,
@@ -45,6 +51,7 @@ do
         UnsafeMode = false,
         InitTime = os.clock(),
         Folder = "3thirty",
+        ConfigRoot = "3thirty",
         ConfigFolder = "3thirty/Configs",
         UI = {
             Name = "3thirty",
@@ -68,8 +75,11 @@ do
             DropdownZIndex = 1,
             OpenColorFrames = 0,
             ScreenGUI = nil,
+            KeybindViewer = nil,
             TweenSpeed = 0.15,
             NewFont = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+            KeybindTextSize = 9,
+            KeybindTitleTextSize = 12,
             FontSize = 13,
             DraggingGui = nil,
             Notifications = {
@@ -84,15 +94,15 @@ do
                 Position = "Top Left",
                 Offset = Vector2.new(6, 70),
                 Spacing = 6,
-                MinWidth = 170,
+                MinWidth = 0,
                 MaxWidth = 320,
-                TextSize = 13,
-                AnimationTime = 0.22,
-                BackgroundColor = Color3.fromRGB(18, 18, 18),
+                TextSize = 9,
+                AnimationTime = 0,
+                BackgroundColor = Color3.fromRGB(0, 0, 0),
                 TextColor = Color3.fromRGB(235, 235, 235),
-                OutlineColor = Color3.fromRGB(55, 55, 55),
-                BackgroundTransparency = 0,
-                OutlineTransparency = 0,
+                OutlineColor = Color3.fromRGB(0, 0, 0),
+                BackgroundTransparency = 1,
+                OutlineTransparency = 1,
                 StackLimit = 8,
                 ClickToDismiss = true,
             },
@@ -160,6 +170,12 @@ do
             }
         }
     }
+    local Library = getgenv().Library
+
+    local function GetScreenGUIChildren()
+        local ScreenGUI = Library.UI.ScreenGUI
+        return ScreenGUI and ScreenGUI:GetChildren() or {}
+    end
 
     function Library:Validate(Defaults, Options)
         Options = Options or {}
@@ -167,6 +183,10 @@ do
             if Options[Index] == nil then
                 Options[Index] = Value
             end
+        end
+
+        if type(Options.Flag) == "string" and Options.Flag:sub(1, 10) == "__AutoFlag" then
+            Options.Flag = Library:NewFlag(Options.Name)
         end
 
         return Options
@@ -240,10 +260,23 @@ do
         Library.Tweens[#Library.Tweens + 1] = Tween
     end
 
-    function Library:NewFlag()
+    function Library:NewFlag(...)
         Library.UnnamedFlags += 1
+        local name = ...
+        local hasName = select("#", ...) > 0
+        local base = hasName and tostring(name or "") or ""
+        base = base:gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
+        if base == "" then
+            base = hasName and ("Flag%s"):format(Library.UnnamedFlags) or ("__AutoFlag%s"):format(Library.UnnamedFlags)
+        end
 
-        return ("UnknownFlag%s"):format(tostring(Library.UnnamedFlags))
+        local flag = base
+        local suffix = 1
+        while Library.Flags[flag] do
+            suffix += 1
+            flag = ("%s_%s"):format(base, suffix)
+        end
+        return flag
     end
 
     function Library:ClampString(String, MaxWidth)
@@ -288,24 +321,108 @@ do
         return Best
     end
 
+    function Library:SetConfigFolder(Folder)
+        local Path = tostring(Folder or "Configs")
+            :gsub("\\", "/")
+            :gsub("^/+", "")
+            :gsub("/+", "/")
+            :gsub("^" .. self.ConfigRoot:gsub("[%W]", "%%%0") .. "/?", "")
+            :gsub("%.%.", "")
+            :gsub("[^%w_/%-]", "")
+            :gsub("^/+", "")
+            :gsub("/+", "/")
+            :gsub("/$", "")
+        if Path == "" then
+            Path = "Configs"
+        end
+
+        self.ConfigFolder = self.ConfigRoot .. "/" .. Path
+        EnsureFolder(self.ConfigFolder)
+        return self.ConfigFolder
+    end
+
+    function Library:SanitizeConfigName(Name)
+        Name = tostring(Name or "")
+            :gsub("[\\/]", "")
+            :gsub("%.%.", "")
+            :gsub("[^%w_ %-]", "")
+            :gsub("^%s+", "")
+            :gsub("%s+$", "")
+        return Name:sub(1, 32)
+    end
+
+    function Library:GetConfigPath(Name)
+        Name = self:SanitizeConfigName(Name)
+        if Name == "" then
+            return nil
+        end
+        return self.ConfigFolder .. "/" .. Name .. ".cfg"
+    end
+
+    local function SerializeConfigValue(Value)
+        if typeof(Value) == "Color3" then
+            local Hue, Saturation, Brightness = Value:ToHSV()
+            return {__type = "Color3", Hue, Saturation, Brightness}
+        end
+
+        if type(Value) ~= "table" then
+            return Value
+        end
+
+        if typeof(Value.Color) == "Color3" and Value.Transparency ~= nil then
+            local Hue, Saturation, Brightness = Value.Color:ToHSV()
+            return {Hue, Saturation, Brightness, tonumber(Value.Transparency) or 0}
+        end
+
+        local Result = {}
+        for Index, Item in Value do
+            if type(Index) == "string" or type(Index) == "number" then
+                Result[Index] = SerializeConfigValue(Item)
+            end
+        end
+        return Result
+    end
+
+    local function DeserializeConfigValue(Value)
+        if type(Value) ~= "table" then
+            return Value
+        end
+
+        if Value.__type == "Color3"
+            and type(Value.Hue) == "number"
+            and type(Value.Saturation) == "number"
+            and type(Value.Brightness) == "number"
+        then
+            return Color3.fromHSV(Value.Hue, Value.Saturation, Value.Brightness)
+        end
+
+        local Result = {}
+        for Index, Item in Value do
+            Result[Index] = DeserializeConfigValue(Item)
+        end
+        return Result
+    end
+
     function Library:GetConfig()
-        local Config = {}
-
-        for Index, Value in Library.Flags do
-            if Value.Get and not string.find(Index, "_Status") and not string.find(Index, "Library.Config.") then
-                local CurrentValue = Value:Get()
-                if typeof(CurrentValue) == "table" and CurrentValue.Color and CurrentValue.Transparency then
-                    local Transparency = CurrentValue.Transparency
-                    local Hue, Saturation, Value = CurrentValue.Color:ToHSV()
-
-                    Config[Index] = {Hue, Saturation, Value, Transparency}
-                else
-                    Config[Index] = CurrentValue
+        local Values = {}
+        for Index, Control in Library.Flags do
+            if type(Index) == "string"
+                and not string.find(Index, "_Status", 1, true)
+                and not string.find(Index, "Library.Config.", 1, true)
+                and (Control.GetConfig or Control.Get)
+            then
+                local Getter = Control.GetConfig or Control.Get
+                local Success, CurrentValue = pcall(Getter, Control)
+                if Success and CurrentValue ~= nil then
+                    Values[Index] = SerializeConfigValue(CurrentValue)
                 end
             end
         end
 
-        return HttpService:JSONEncode(Config)
+        return HttpService:JSONEncode({
+            Version = "mcfe330",
+            Values = Values,
+        })
     end
 
     function Library:LoadConfig(Config)
@@ -321,13 +438,62 @@ do
             return false
         end
 
-        for Index, Value in Decoded do
-            if Library.Flags[Index] and Library.Flags[Index].Set then
-                Library.Flags[Index]:Set(Value)
-            end
+        local Values = Decoded.Values or Decoded
+        if typeof(Values) ~= "table" then
+            return false
         end
 
+        for Index, Value in Values do
+            local Control = Library.Flags[Index]
+            if Control then
+                local Setter = Control.SetConfig or Control.Set
+                if Setter then
+                    pcall(Setter, Control, DeserializeConfigValue(Value))
+                end
+            end
+        end
         return true
+    end
+
+    function Library:SaveConfig(Name)
+        local Path = self:GetConfigPath(Name)
+        if not Path then
+            return false
+        end
+        return pcall(writefile, Path, self:GetConfig())
+    end
+
+    function Library:LoadConfigFile(Name)
+        local Path = self:GetConfigPath(Name)
+        if not Path or not isfile(Path) then
+            return false
+        end
+        local Success, Contents = pcall(readfile, Path)
+        return Success and self:LoadConfig(Contents) or false
+    end
+
+    function Library:AutoLoadConfig(Name)
+        return self:LoadConfigFile(Name or "default")
+    end
+
+    function Library:DeleteConfig(Name)
+        local Path = self:GetConfigPath(Name)
+        if not Path or not isfile(Path) then
+            return false
+        end
+        return pcall(delfile, Path)
+    end
+
+    function Library:GetConfigNames()
+        local Names = {}
+        for _, File in listfiles(self.ConfigFolder) do
+            local Name = File:gsub("\\", "/"):match("([^/]+)%.cfg$")
+            if Name then
+                Names[#Names + 1] = Name
+            end
+        end
+        table.sort(Names)
+        return Names
     end
 
     function Library:SectionDragging(Frame)
@@ -366,6 +532,282 @@ do
 
         return Object
     end
+
+    function Library:UpdateKeybindViewer()
+        local viewer = Library.UI.KeybindViewer
+        if not viewer or not viewer.Root or not viewer.Root.Parent then
+            return
+        end
+
+        local function measure(Text)
+            local Parameters = Instance.new("GetTextBoundsParams")
+            Parameters.Text = Text
+            Parameters.Font = keybindFont
+            Parameters.Size = Library.UI.KeybindTextSize
+            Parameters.Width = 100000
+            local Success, Bounds = pcall(TextService.GetTextBoundsAsync, TextService, Parameters)
+            Parameters:Destroy()
+            return Success and Bounds or Vector2.new(#Text * Library.UI.KeybindTextSize * 0.55, Library.UI.KeybindTextSize)
+        end
+
+        local visible = {}
+        local rows = 0
+        local nameWidth = 0
+        local bindWidth = 0
+        for _, keybind in Library.Keybinds do
+            local bind = keybind.Keybind
+            if typeof(bind) == "EnumItem" then
+                bind = Library.UI.Keys[bind] or bind.Name
+            end
+            bind = tostring(bind or "[-]")
+            local masterEnabled = true
+            local masterToggle = keybind.MasterToggle
+            if masterToggle then
+                local checked, state = pcall(masterToggle.GetState, masterToggle)
+                masterEnabled = checked and state == true
+            end
+            if not keybind.HideFromList and masterEnabled and bind ~= "[-]" then
+                rows += 1
+                visible[keybind] = true
+                local name = tostring(keybind.Name or "")
+                local bindText = "[" .. bind:upper() .. "]"
+                local nameBounds = measure(name)
+                local bindBounds = measure(bindText)
+                local row = viewer.Entries[keybind]
+                if not row then
+                    row = {
+                        Frame = Library:CreateObject("Frame", {
+                            BackgroundTransparency = 1,
+                            BorderSizePixel = 0,
+                            Size = UDim2.new(1, 0, 0, 17),
+                            Parent = viewer.Content,
+                        }, true),
+                    }
+                    row.Name = Library:CreateObject("TextLabel", {
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                        FontFace = keybindFont,
+                        Position = UDim2.fromOffset(0, 0),
+                        Size = UDim2.new(0.5, -2, 1, 0),
+                        TextColor3 = Library.Theme.Default.TextColor,
+                        TextStrokeTransparency = 1,
+                        TextSize = Library.UI.KeybindTextSize,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        Parent = row.Frame,
+                    }, true)
+                    row.Bind = Library:CreateObject("TextLabel", {
+                        AnchorPoint = Vector2.new(0, 0),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                        FontFace = keybindFont,
+                        Position = UDim2.new(0.5, 2, 0, 0),
+                        Size = UDim2.new(0.5, -2, 0, 17),
+                        TextColor3 = Library.Theme.Default.TextColor,
+                        TextStrokeTransparency = 1,
+                        TextSize = Library.UI.KeybindTextSize,
+                        TextXAlignment = Enum.TextXAlignment.Center,
+                        Parent = row.Frame,
+                    }, true)
+                    Library:AddTheme(row.Name, {TextColor3 = "TextColor"})
+                    viewer.Entries[keybind] = row
+                end
+
+                if row.State then
+                    row.State:Destroy()
+                    row.State = nil
+                end
+                row.Frame.Visible = true
+                row.Name.Text = name
+                row.Bind.Text = bindText
+                row.Bind.TextColor3 = keybind.State and Library.Theme.Default.Accent or Library.Theme.Default.TextColor
+                row.Height = math.max(17, nameBounds.Y + 2, bindBounds.Y + 2)
+                nameWidth = math.max(nameWidth, nameBounds.X)
+                bindWidth = math.max(bindWidth, bindBounds.X)
+            end
+        end
+
+        for keybind, row in viewer.Entries do
+            if not visible[keybind] then
+                row.Frame.Visible = false
+            end
+        end
+
+        viewer.Empty.Visible = rows == 0
+        viewer.Root.Visible = viewer.Visible and rows > 0
+        local width = math.max(viewer.BaseWidth or viewer.Width, math.ceil(nameWidth + bindWidth + 22))
+        local contentWidth = width - 14
+        local nameColumn = math.max(math.floor(contentWidth * 0.5), math.ceil(nameWidth + 4))
+        local bindColumn = contentWidth - nameColumn
+        if bindColumn < bindWidth + 4 then
+            bindColumn = math.ceil(bindWidth + 4)
+            nameColumn = contentWidth - bindColumn
+        end
+
+        local contentHeight = 0
+        for keybind, row in viewer.Entries do
+            if visible[keybind] then
+                row.Frame.Size = UDim2.new(1, 0, 0, row.Height)
+                row.Name.Position = UDim2.fromOffset(0, 0)
+                row.Name.Size = UDim2.fromOffset(nameColumn, row.Height)
+                row.Bind.Position = UDim2.fromOffset(nameColumn, 0)
+                row.Bind.Size = UDim2.fromOffset(bindColumn, row.Height)
+                contentHeight += row.Height
+            end
+        end
+        contentHeight += math.max(rows - 1, 0) * 2
+        viewer.Width = width
+        viewer.Root.Size = UDim2.fromOffset(width, 30 + contentHeight)
+        viewer.Content.Size = UDim2.fromOffset(contentWidth, contentHeight)
+    end
+
+    function Library:CreateKeybindViewer(Options)
+        Options = Library:Validate({
+            Position = UDim2.new(1, -230, 0, 70),
+            Width = 220,
+            Visible = true,
+        }, Options or {})
+        if Library.UI.KeybindViewer then
+            Library.UI.KeybindViewer.Visible = Options.Visible
+            Library:UpdateKeybindViewer()
+            return Library.UI.KeybindViewer
+        end
+
+        local root = Library:CreateObject("Frame", {
+            Active = true,
+            BackgroundColor3 = Color3.fromRGB(12, 12, 12),
+            BorderSizePixel = 0,
+            Draggable = true,
+            Position = Options.Position,
+            Size = UDim2.fromOffset(Options.Width, 49),
+            Visible = false,
+            Parent = Library.UI.ScreenGUI,
+        }, true)
+        local inline = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            Parent = root,
+        }, true)
+        local inner = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            Parent = inline,
+        }, true)
+        local shell = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(60, 60, 60),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(3, 3),
+            Size = UDim2.new(1, -6, 1, -6),
+            Parent = inner,
+        }, true)
+        local patternHolder = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            Parent = shell,
+        }, true)
+        Library:CreateObject("ImageLabel", {
+            ImageColor3 = Color3.fromRGB(12, 12, 12),
+            ScaleType = Enum.ScaleType.Tile,
+            BorderColor3 = Color3.fromRGB(0, 0, 0),
+            Image = "rbxassetid://8547666218",
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            TileSize = UDim2.fromOffset(8, 8),
+            BorderSizePixel = 0,
+            Parent = patternHolder,
+        }, true)
+        local top = Library:CreateObject("Frame", {
+            BackgroundColor3 = Color3.fromRGB(12, 12, 12),
+            BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 0, 4),
+            Parent = shell,
+        }, true)
+        Library:CreateObject("ImageLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Image = "rbxassetid://8508019876",
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            Parent = top,
+        }, true)
+        Library:CreateObject("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 0.550000011920929),
+            }),
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 12, 12)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+            }),
+            Parent = top,
+        }, true)
+        local title = Library:CreateObject("TextLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            FontFace = keybindTitleFont,
+            Position = UDim2.fromOffset(0, 7),
+            Size = UDim2.new(1, 0, 0, 15),
+            Text = "Keybinds",
+            TextColor3 = Library.Theme.Default.TextColor,
+            TextStrokeTransparency = 1,
+            TextSize = Library.UI.KeybindTitleTextSize,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Parent = patternHolder,
+        }, true)
+        local content = Library:CreateObject("Frame", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(7, 25),
+            Size = UDim2.new(1, -14, 1, -30),
+            Parent = patternHolder,
+        }, true)
+        Library:CreateObject("UIListLayout", {
+            Padding = UDim.new(0, 2),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Parent = content,
+        }, true)
+        local empty = Library:CreateObject("TextLabel", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            FontFace = keybindFont,
+            Size = UDim2.new(1, 0, 0, 17),
+            Text = "No keybinds",
+            TextColor3 = Color3.fromRGB(120, 120, 120),
+            TextStrokeTransparency = 1,
+            TextSize = Library.UI.KeybindTextSize,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Parent = content,
+        }, true)
+
+        Library.UI.KeybindViewer = {
+            Root = root,
+            Content = content,
+            Empty = empty,
+            Entries = {},
+            BaseWidth = Options.Width,
+            Width = Options.Width,
+            Visible = Options.Visible,
+        }
+        Library:AddTheme(title, {TextColor3 = "TextColor"})
+        Library:UpdateKeybindViewer()
+        return Library.UI.KeybindViewer
+    end
+
+    function Library:SetKeybindViewerVisible(Visible)
+        local viewer = Library.UI.KeybindViewer
+        if not viewer then return end
+        viewer.Visible = Visible
+        Library:UpdateKeybindViewer()
+    end
+
     local function KeepVisibleWhenMenuCloses(Root)
         Library.Objects[Root][3] = true
         for _, Object in Root:GetDescendants() do
@@ -486,10 +928,9 @@ do
             ShowTeam = true,
         }, Options)
 
-        local Proggy = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
         local Root, Content = CreatePanelShell("3ThirtyTargetHUD", Options.Position, Options.Size, 60, true)
         local AvatarOutline = Library:CreateObject("Frame", {
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
             Position = UDim2.fromOffset(8, 10),
             Size = UDim2.fromOffset(50, 50),
@@ -497,19 +938,19 @@ do
             Parent = Content,
         })
         local AvatarBackground = Library:CreateObject("Frame", {
-            BackgroundColor3 = Color3.fromRGB(34, 34, 34),
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(1, 1),
-            Size = UDim2.new(1, -2, 1, -2),
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.fromScale(1, 1),
             ZIndex = 71,
             Parent = AvatarOutline,
         })
         local Avatar = Library:CreateObject("ImageLabel", {
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(1, 1),
+            Position = UDim2.fromOffset(0, 0),
             ScaleType = Enum.ScaleType.Crop,
-            Size = UDim2.new(1, -2, 1, -2),
+            Size = UDim2.fromScale(1, 1),
             ZIndex = 72,
             Parent = AvatarBackground,
         })
@@ -567,7 +1008,7 @@ do
         local Value = Library:CreateObject("TextLabel", {
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            FontFace = Proggy,
+            FontFace = keybindFont,
             Size = UDim2.fromScale(1, 1),
             Text = "",
             TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -787,42 +1228,34 @@ do
         return Table2
     end
 
-    function Library:UpdateConfigList(List, Type)
-        if typeof(listfiles) ~= "function" or not List then return end
-
-        local ConfigPath = Library.ConfigFolder:gsub("[%.%-%+%[%]%(%)%^%$]", "%%%0")
-        for _, File in listfiles(Library.ConfigFolder) do
-            local FileName = File:gsub("\\", "/"):gsub(ConfigPath .. "/", ""):gsub("%.cfg$", "")
-
-            if Type == "Remove" then
-                List:RemoveValue(FileName)
-            else
-                List:AddValue(FileName)
-            end
-        end
-    end
-
     function Library:RefreshConfigList(List)
+        if not List then
+            return
+        end
+        local Selected = List:Get()
         List:Clear()
 
-        for _, File in listfiles(Library.ConfigFolder) do
-            local Name = File:gsub("\\", "/"):match("([^/]+)%.cfg$")
-            if Name then
-                List:AddValue(Name)
-            end
+        for _, Name in self:GetConfigNames() do
+            List:AddValue(Name)
+        end
+        if Selected then
+            List:Set(Selected)
         end
     end
 
-    function Library:CreateConfigPanel(Section)
+    function Library:CreateConfigPanel(Section, Options)
+        Options = Library:Validate({Folder = nil}, Options or {})
+        if Options.Folder then
+            Library:SetConfigFolder(Options.Folder)
+        else
+            Library:SetConfigFolder(Library.ConfigFolder)
+        end
+
         local ConfigList = Section:List({Size = 150, Flag = "Library.Config.List"})
         local ConfigName = Section:TextBox({Name = "Config Name", Flag = "Library.Config.Name", Max = 32})
 
         local function GetName()
-            return ConfigName:Get():gsub("[^%w%-%_ ]", "")
-        end
-
-        local function GetPath(Name)
-            return Library.ConfigFolder .. "/" .. Name .. ".cfg"
+            return Library:SanitizeConfigName(ConfigName:Get())
         end
 
         local function Notify(Message)
@@ -837,30 +1270,40 @@ do
                     Notify("Enter a config name first.")
                     return
                 end
-                writefile(GetPath(Name), Library:GetConfig())
-                Library:RefreshConfigList(ConfigList)
-                Notify("Saved " .. Name .. ".")
+                if Library:SaveConfig(Name) then
+                    Library:RefreshConfigList(ConfigList)
+                    ConfigList:Set(Name)
+                    Notify("Saved " .. Name .. ".")
+                else
+                    Notify("Could not save " .. Name .. ".")
+                end
             end,
         })
 
         Section:Button({
             Name = "Load Selected",
             Callback = function()
-                local Name = ConfigList:Get()
-                if not Name then
+                local Name = ConfigList:Get() or GetName()
+                if not Name or Name == "" then
                     Notify("Select a config first.")
                     return
                 end
-                local Path = GetPath(Name)
-                if not isfile(Path) then
-                    Library:RefreshConfigList(ConfigList)
-                    Notify("The selected config no longer exists.")
-                    return
-                end
-                if Library:LoadConfig(readfile(Path)) then
+                if Library:LoadConfigFile(Name) then
                     Notify("Loaded " .. Name .. ".")
                 else
+                    Library:RefreshConfigList(ConfigList)
                     Notify("Could not load " .. Name .. ".")
+                end
+            end,
+        })
+
+        Section:Button({
+            Name = "Auto Load Config",
+            Callback = function()
+                if Library:AutoLoadConfig("default") then
+                    Notify("Auto-loaded default.")
+                else
+                    Notify("Could not auto-load default.")
                 end
             end,
         })
@@ -868,17 +1311,17 @@ do
         Section:Button({
             Name = "Delete Selected",
             Callback = function()
-                local Name = ConfigList:Get()
-                if not Name then
+                local Name = ConfigList:Get() or GetName()
+                if not Name or Name == "" then
                     Notify("Select a config first.")
                     return
                 end
-                local Path = GetPath(Name)
-                if isfile(Path) then
-                    delfile(Path)
+                if Library:DeleteConfig(Name) then
+                    Library:RefreshConfigList(ConfigList)
+                    Notify("Deleted " .. Name .. ".")
+                else
+                    Notify("Could not delete " .. Name .. ".")
                 end
-                Library:RefreshConfigList(ConfigList)
-                Notify("Deleted " .. Name .. ".")
             end,
         })
 
@@ -952,6 +1395,9 @@ do
                     end
                 end
             end
+        end
+        if Library.UpdateKeybindViewer then
+            Library:UpdateKeybindViewer()
         end
     end
 
@@ -1657,7 +2103,11 @@ do
                     Library:Connection(ColorPickerOutline_1:GetPropertyChangedSignal("AbsolutePosition"), function()
                         local CurrentY = ColorPickerOutline_1.AbsolutePosition.Y
                         local MainUICurrentY = Options.MainUI.AbsolutePosition.Y
-                        local CurrentCanvasPosition = Options.Parent.Parent.CanvasPosition
+                        local ParentScroller = Options.Parent and Options.Parent.Parent
+                        if not ParentScroller then
+                            return
+                        end
+                        local CurrentCanvasPosition = ParentScroller.CanvasPosition
 
                         if MainUICurrentY ~= MainUIStartingY then
                             MainUIStartingY = MainUICurrentY
@@ -1772,6 +2222,19 @@ do
                         return {Color = ColorPicker.Color, Transparency = ColorPicker.Alpha}
                     end
 
+                    function ColorPicker:GetConfig()
+                        local Hue, Saturation, Brightness = ColorPicker.Color:ToHSV()
+                        return {Hue, Saturation, Brightness, ColorPicker.Alpha}
+                    end
+
+                    function ColorPicker:SetConfig(Value)
+                        if type(Value) == "table" and typeof(Value.Color) == "Color3" then
+                            ColorPicker:Set(Value.Color, Value.Transparency)
+                        else
+                            ColorPicker:Set(Value)
+                        end
+                    end
+
                     function ColorPicker:UpdateHue(Percentage)
                         local Percentage = typeof(Percentage) == "number" and math.clamp(Percentage, 0, 1) or 0
 
@@ -1881,7 +2344,7 @@ do
                 local Fast = Fast or false
                 local Removed = false
 
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "ColorPickerFrame" .. ColorPickerId then
                         Removed = true
                         if Fast then
@@ -1906,7 +2369,7 @@ do
             end
 
             function ColorPicker:FindFrame()
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "ColorPickerFrame" .. ColorPickerId then
                         return true
                     end
@@ -1978,7 +2441,11 @@ do
                 Library:Connection(ColorPickerOutline_1:GetPropertyChangedSignal("AbsolutePosition"), function()
                     local CurrentY = ColorPickerOutline_1.AbsolutePosition.Y
                     local MainUICurrentY = Options.MainUI.AbsolutePosition.Y
-                    local CurrentCanvasPosition = Options.Parent.Parent.CanvasPosition
+                    local ParentScroller = Options.Parent and Options.Parent.Parent
+                    if not ParentScroller then
+                        return
+                    end
+                    local CurrentCanvasPosition = ParentScroller.CanvasPosition
 
                     if MainUICurrentY ~= MainUIStartingY then
                         MainUIStartingY = MainUICurrentY
@@ -2131,7 +2598,7 @@ do
             function ColorPicker:RemoveOtherFrame(Fast)
                 local Fast = Fast or false
 
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "ColorPickerOutline" .. ColorPickerId then
                         if Fast then
                             Value:Destroy()
@@ -2147,7 +2614,7 @@ do
             end
 
             function ColorPicker:FindOtherFrame()
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "ColorPickerOutline" .. ColorPickerId then
                         return true
                     end
@@ -2190,9 +2657,12 @@ do
 
     function Library:Keybind(Options)
         Options = Library:Validate({
+            Name = "Keybind",
             Default = Enum.KeyCode.Backspace,
             Mode = "Toggle",
             UseMode = true,
+            Master = false,
+            StateCallback = nil,
             HideFromList = false,
             Blacklisted = {},
             Parent = nil,
@@ -2228,14 +2698,18 @@ do
             Current = {},
             CurrentMode = nil,
             Hiding = false,
+            Name = Options.Name,
+            HideFromList = Options.HideFromList,
+            MasterToggle = Options.Toggle,
         }
 
         Library.Flags[Options.Flag] = Keybind
+        Library.Keybinds[#Library.Keybinds + 1] = Keybind
         Library.UI.TotalKeybindModes += 1
         local KeybindId = Library.UI.TotalKeybindModes
 
         local KeybindObject = Library:CreateObject("TextLabel", {
-            FontFace = Font.new("rbxassetid://12187371840", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+            FontFace = keybindFont,
             TextColor3 = Color3.fromRGB(117, 117, 117),
             BorderColor3 = Color3.fromRGB(0, 0, 0),
             Text = "[-]",
@@ -2248,7 +2722,7 @@ do
             TextXAlignment = Enum.TextXAlignment.Right,
             ZIndex = 3,
             TextStrokeTransparency = 0,
-            TextSize = 9,
+            TextSize = Library.UI.KeybindTextSize,
             BackgroundColor3 = Color3.fromRGB(255, 255, 255),
             Parent = Options.Parent
         })
@@ -2340,6 +2814,7 @@ do
 
                     Options.Callback(Key)
                     Library.Flags[Options.Flag] = Keybind
+                    Library:UpdateKeybindViewer()
                 else
                     Keybind.Keybind = "[-]"
                     KeybindObject.Text = Keybind.Keybind
@@ -2358,23 +2833,21 @@ do
                     Keybind.State = Bool
                 end
 
-                if not Options.HideFromList then
-                    if Keybind.State then
+	                if Options.Toggle and not Options.Master then
+	                    if Options.Toggle.GetFlag then
+	                        Library.Flags[Options.Toggle:GetFlag()] = Keybind
+	                    end
 
-                    else
-
-                    end
+	                    if Options.Toggle.ToggleGUI then
+	                        Options.Toggle:ToggleGUI(Keybind.State)
+	                    elseif Options.Toggle.State then
+	                        Options.Toggle:GetCallback(Keybind.State)
+	                    end
+	                end
+                if Options.StateCallback then
+	                    Options.StateCallback(Keybind.State)
                 end
-
-                if Options.Toggle.GetFlag then
-                    Library.Flags[Options.Toggle:GetFlag()] = Keybind
-                end
-
-                if Options.Toggle.ToggleGUI then
-                    Options.Toggle:ToggleGUI(Keybind.State)
-                elseif Options.Toggle.State then
-                    Options.Toggle:GetCallback(Keybind.State)
-                end
+                Library:UpdateKeybindViewer()
             end
 
             task.delay(1, function()
@@ -2382,9 +2855,44 @@ do
             end)
 
             function Keybind:Get()
+				if not Keybind.RegKeybind then
+					return nil
+				end
                 local KeyString = Keybind.RegKeybind.EnumType == Enum.KeyCode and tostring(Keybind.RegKeybind):match("^Enum%.KeyCode%.(.+)$") or tostring(Keybind.RegKeybind):match("^Enum%.UserInputType%.(.+)$")
 
                 return KeyString
+            end
+
+            function Keybind:GetConfig()
+                return {
+                    Key = Keybind:Get() or "[-]",
+                    State = Keybind.State,
+                    Mode = Keybind.Mode,
+                }
+            end
+
+            function Keybind:SetConfig(Value)
+                if type(Value) ~= "table" then
+                    Keybind:Set(Value)
+                    return
+                end
+
+                local Key = Value.Key or Value.Keybind
+                if Key == "[-]" then
+                    Keybind.RegKeybind = nil
+                    Keybind.Keybind = "[-]"
+                    KeybindObject.Text = "[-]"
+                    Library:UpdateKeybindViewer()
+                elseif Key ~= nil then
+                    Keybind:Set(Key)
+                end
+
+                if type(Value.Mode) == "string" then
+                    Keybind:SetMode(Value.Mode)
+                end
+                if Value.State ~= nil then
+                    Keybind:Toggle(Value.State == true)
+                end
             end
 
             function Keybind:Active()
@@ -2461,7 +2969,11 @@ do
                 Library:Connection(KeybindObject:GetPropertyChangedSignal("AbsolutePosition"), function()
                     local CurrentY = KeybindObject.AbsolutePosition.Y
                     local MainUICurrentY = Options.MainUI.AbsolutePosition.Y
-                    local CurrentCanvasPosition = Options.Parent.Parent.CanvasPosition
+                    local ParentScroller = Options.Parent and Options.Parent.Parent
+                    if not ParentScroller then
+                        return
+                    end
+                    local CurrentCanvasPosition = ParentScroller.CanvasPosition
 
                     if MainUICurrentY ~= MainUIStartingY then
                         MainUIStartingY = MainUICurrentY
@@ -2616,7 +3128,7 @@ do
             function Keybind:RemoveFrame(Fast)
                 local Fast = Fast or false
 
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "KeybindModePickerOutline" .. KeybindId then
                         if Fast then
                             Value:Destroy()
@@ -2632,7 +3144,7 @@ do
             end
 
             function Keybind:FindFrame()
-                for Index, Value in Library.UI.ScreenGUI:GetChildren() do
+                for Index, Value in GetScreenGUIChildren() do
                     if Value:IsA("Frame") and Value.Name == "KeybindModePickerOutline" .. KeybindId then
                         return true
                     end
@@ -2926,13 +3438,14 @@ do
 
                 MultiBox.Batching = true
                 for Index, Item in MultiBox.AllItems do
-                    local ShouldBeActive = Selected[Index] == true
-                    if MultiBox.Items[Index] ~= ShouldBeActive then
-                        if ShouldBeActive then
-                            Item:Activate()
-                        else
-                            Item:Deactivate()
-                        end
+                    if Item.Active and not Selected[Index] then
+                        Item:Deactivate()
+                    end
+                end
+                for _, Value in Values do
+                    local Item = MultiBox.AllItems[Value]
+                    if Item and not Item.Active then
+                        Item:Activate()
                     end
                 end
                 MultiBox.Batching = false
@@ -2943,6 +3456,14 @@ do
 
             function MultiBox:Get()
                 return MultiBox.Value
+            end
+
+            function MultiBox:GetConfig()
+                return table.clone(MultiBox.Value)
+            end
+
+            function MultiBox:SetConfig(Value)
+                MultiBox:Set(Value)
             end
 
             function MultiBox:SetVisible(Bool)
@@ -4281,6 +4802,7 @@ do
 
                 Library.Flags[Options.Flag] = Toggle
                 Options.Callback(Toggle.State)
+                Library:UpdateKeybindViewer()
             end
 
             function Toggle:GetName()
@@ -4343,9 +4865,7 @@ do
                     Callback = function() end,
                 }, Options or {})
 
-                local ColorPicker = {}
-
-                Toggle.ColorPickers[#Toggle.ColorPickers + 1] = ColorPicker
+                local ColorPickerIndex = #Toggle.ColorPickers + 1
 
                 local ColorPickerFrame = Library:ColorPicker({
                     Name = Options.Name,
@@ -4358,31 +4878,35 @@ do
                     Callback = Options.Callback,
                     Parent = PreviewToggle,
                     Keybind = Toggle.KeybindState,
-                    Count = #Toggle.ColorPickers,
+                    Count = ColorPickerIndex,
                 })
 
+                Toggle.ColorPickers[ColorPickerIndex] = ColorPickerFrame
                 return ColorPickerFrame
             end
 
             function Toggle:Keybind(Options)
                 Options = Library:Validate({
+                    Name = Toggle:GetName(),
                     Default = Enum.KeyCode.Backspace,
                     Mode = "Toggle",
                     UseMode = true,
+                    Master = true,
                     HideFromList = false,
                     Blacklisted = {},
                     Hiding = false,
-            Flag = Library:NewFlag(),
+                    Flag = Library:NewFlag(),
+                    StateCallback = nil,
                     Callback = function() end,
                 }, Options or {})
 
-                local Keybind = {}
-
                 Toggle.KeybindState = true
 
-                Library:Keybind({
+                local Keybind = Library:Keybind({
+                    Name = Options.Name,
                     Default = Options.Default,
                     Mode = Options.Mode,
+                    Master = Options.Master,
                     HideFromList = Options.HideFromList,
                     Blacklisted = Options.Blacklisted,
                     Parent = PreviewToggle,
@@ -4394,6 +4918,7 @@ do
                     ToggleState = Toggle.State,
                     Flag = Options.Flag,
                     Callback = Options.Callback,
+                    StateCallback = Options.StateCallback,
                     Count = #Toggle.ColorPickers + 1,
                 })
 
@@ -4533,9 +5058,7 @@ do
                     Callback = function() end,
                 }, Options or {})
 
-                local ColorPicker = {}
-
-                Label.ColorPickers[#Label.ColorPickers + 1] = ColorPicker
+                local ColorPickerIndex = #Label.ColorPickers + 1
 
                 local ColorPickerFrame = Library:ColorPicker({
                     Name = Options.Name,
@@ -4548,9 +5071,10 @@ do
                     Callback = Options.Callback,
                     Parent = PreviewLabel,
                     Keybind = Label.KeybindState,
-                    Count = #Label.ColorPickers,
+                    Count = ColorPickerIndex,
                 })
 
+                Label.ColorPickers[ColorPickerIndex] = ColorPickerFrame
                 return ColorPickerFrame
             end
 
@@ -4728,6 +5252,12 @@ do
             function TextBox:Get()
                 return TextBoxObject.Text
             end
+
+            function TextBox:Set(Value)
+                TextBoxObject.Text = tostring(Value or ""):sub(1, Options.Max)
+                Library.Flags[Options.Flag] = TextBox
+                Options.Callback(TextBoxObject.Text)
+            end
         end
 
         do
@@ -4809,6 +5339,7 @@ do
         local List = {
             CurrentValue = nil,
             CurrentValueName = nil,
+            Items = {},
         }
 
         Library.Flags[Options.Flag] = List
@@ -4919,6 +5450,13 @@ do
                 return List.CurrentValueName
             end
 
+            function List:Set(Value)
+                local Item = List.Items[tostring(Value or "")]
+                if Item then
+                    Item:Activate()
+                end
+            end
+
             function List:SetVisible(Bool)
                 local OldValues = Library.Objects[PreviewList]
 
@@ -4944,6 +5482,7 @@ do
                     Active = false,
                     Hovering = false,
                 }
+                List.Items[Value] = ListValue
 
                 local InactiveValue = Library:CreateObject("Frame", {
                     Name = Value .. "1",
@@ -5098,6 +5637,7 @@ do
                             List.CurrentValue = nil
                             List.CurrentValueName = nil
                         end
+                        List.Items[Value] = nil
                         Object:Destroy()
                     end
                 end
@@ -5113,6 +5653,7 @@ do
                 end
                 List.CurrentValue = nil
                 List.CurrentValueName = nil
+                table.clear(List.Items)
                 List:UpdateSection()
             end
 
@@ -5663,7 +6204,9 @@ do
                 Index = Library.UI.TabIndex + 1,
                 SubSectionEnabled = false,
                 DropdownSectionEnabled = false,
-                LayoutDirty = true,
+                LayoutInitialized = false,
+                LayoutQueued = false,
+                SectionParents = {},
                 Position = "Bottom",
                 Sides = {
                     Left = {
@@ -5832,8 +6375,8 @@ do
                 Parent = Right
             })
 
-            function Tab:UpdateSectionLayout(Side)
-                local parent = Side == "Left" and Left or Right
+            function Tab:UpdateSectionLayout(Side, Parent)
+                local parent = Parent or (Side == "Left" and Left or Right)
                 local sections = {}
                 local fixedHeight = 0
                 local autoCount = 0
@@ -5843,10 +6386,10 @@ do
                         local outline = section.Outline
                         if outline.Parent == parent and outline.Visible then
                             sections[#sections + 1] = section
-                        if section.AutoSize and not section.Section.ManualSize then
-                            autoCount += 1
-                        else
-                            fixedHeight += outline.AbsoluteSize.Y
+                            if section.AutoSize then
+                                autoCount += 1
+                            else
+                                fixedHeight += outline.AbsoluteSize.Y
                             end
                         end
                     end
@@ -5875,33 +6418,28 @@ do
                 end
             end
 
-            function Tab:QueueSectionLayout()
-                Tab.LayoutDirty = true
-            end
-
-            Library:Connection(Left:GetPropertyChangedSignal("AbsoluteSize"), function()
-                Tab:QueueSectionLayout()
-            end)
-            Library:Connection(Right:GetPropertyChangedSignal("AbsoluteSize"), function()
-                Tab:QueueSectionLayout()
-            end)
-            Library:Connection(SectionsHolder:GetPropertyChangedSignal("AbsoluteSize"), function()
-                Tab:QueueSectionLayout()
-            end)
-            Library:Connection(UIListLayout12:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-                Tab:QueueSectionLayout()
-            end)
-            Library:Connection(UIListLayout52:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-                Tab:QueueSectionLayout()
-            end)
-            Library:Connection(RunService.PreRender, function()
-                if not Tab.LayoutDirty then
+            function Tab:InitializeSectionLayout()
+                if Tab.LayoutInitialized or Tab.LayoutQueued then
                     return
                 end
-                Tab.LayoutDirty = false
-                Tab:UpdateSectionLayout("Left")
-                Tab:UpdateSectionLayout("Right")
-            end)
+
+                Tab.LayoutQueued = true
+                task.defer(function()
+                    RunService.PreRender:Wait()
+                    Tab.LayoutQueued = false
+                    if Tab.LayoutInitialized then
+                        return
+                    end
+                    Tab.LayoutInitialized = true
+                    Tab:UpdateSectionLayout("Left")
+                    Tab:UpdateSectionLayout("Right")
+                    for sectionParent in Tab.SectionParents do
+                        if sectionParent ~= Left and sectionParent ~= Right then
+                            Tab:UpdateSectionLayout(nil, sectionParent)
+                        end
+                    end
+                end)
+            end
 
             local SectionsHolder2 = Library:CreateObject("Frame", {
                 Name = "SectionsHolder",
@@ -6050,7 +6588,6 @@ do
                     SizeButton = nil,
                     Hovering = false,
                     DragConnection = nil,
-                    ManualSize = false,
                     Left = {
                         Order = 1,
                     },
@@ -6060,6 +6597,7 @@ do
                 }
 
                 local Parent = Options.Side == "Left" and Left or Right
+                Tab.SectionParents[Options.Parent or Parent] = true
                 local SectionHeight = typeof(Options.Size) == "UDim2" and Options.Size.Y.Offset or tonumber(Options.Size) or 40
                 local AutoSize = Options.AutoSize == nil and Options.Fill or Options.AutoSize
                 Section.AutoSize = AutoSize
@@ -6085,8 +6623,7 @@ do
                 if Options.Fill == false then
                     Tab.Sides[Options.Side].Sizes += SectionOutline.AbsoluteSize.Y + 19
                 end
-                Tab:QueueSectionLayout()
-
+                Tab:InitializeSectionLayout()
                 local SectionInline = Library:CreateObject("Frame", {
                     Name = "SectionInline",
                     Position = UDim2.new(0, 1, 0, 1),
@@ -6309,7 +6846,6 @@ do
                         end
 
                         Section.Size = UDim2.new(Section.Size.X.Scale, Section.Size.X.Offset, 0, math.clamp(Height + 31, 50, SectionOutline.Parent.AbsoluteSize.Y))
-                        Tab:QueueSectionLayout()
                     end
 
                     function Section:CalculateButton(Position)
@@ -6422,9 +6958,6 @@ do
 
                     Library:Connection(SectionOutline:GetPropertyChangedSignal("AbsoluteSize"), function()
                         Section:UpdateSection()
-                        if Section.ManualSize then
-                            Tab:QueueSectionLayout()
-                        end
                     end)
 
                     Library:Connection(SectionScrolling:GetPropertyChangedSignal("AbsoluteCanvasSize"), function()
@@ -6465,8 +6998,6 @@ do
                                     if not Parent2 then return end
 
                                     SectionOutline.Parent = Parent2
-                                    Tab:QueueSectionLayout()
-
                                     for _, SectionChild in Parent2:GetChildren() do
                                         if SectionChild:IsA("Frame") and SectionChild.Visible then
                                             if SectionChild == SectionOutline then
@@ -6496,8 +7027,6 @@ do
                         end)
 
                     Library:Connection(ResizableButton_6.MouseButton1Down, function()
-                        Section.ManualSize = Section.AutoSize
-                        Tab:QueueSectionLayout()
                         ResizableButton_6.ImageColor3 = Library.Theme.Default.Accent
                         SectionInline.BackgroundColor3 = Library.Theme.Default.Accent
 
@@ -6527,7 +7056,6 @@ do
                         if not Input then return end
                         if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                             if Section.DragConnection then Section.DragConnection:Disconnect() Section.DragConnection = nil end
-                            Tab:QueueSectionLayout()
                             Section.Left.Order = 1
                             Section.Right.Order = 1
                             Title.TextColor3 = Color3.fromRGB(198, 198, 198)
@@ -6651,6 +7179,7 @@ do
                 })
 
                 for Index, Value in Options.Options do
+                    local IconValue = type(Value) == "table" and Value.Icon or Value
                     local SectionItem = {
                         Active = false,
                         Hovering = false,
@@ -6728,7 +7257,7 @@ do
                         ImageColor3 = Color3.fromRGB(100, 100, 100),
                         BorderColor3 = Color3.fromRGB(0, 0, 0),
                         Name = "Icon",
-                        Image = Value,
+                        Image = IconValue,
                         BackgroundTransparency = 1,
                         Size = UDim2.new(0, 75, 0, 57),
                         ZIndex = 2,
@@ -6774,12 +7303,21 @@ do
                                 end
 
                                 SectionItem.Active = true
+                                SectionsHolder2.Visible = Outline:GetAttribute("g") == table.find(Window.Tabs, Tab)
 
                                 SectionItem:MoveSides(true)
                                 Icon.ImageColor3 = Color3.fromRGB(188, 188, 188)
 
                                 SubSection.CurrentSection = SectionItem
                                 SectionOutline:SetAttribute("g", Index)
+
+                                task.defer(function()
+                                    RunService.PreRender:Wait()
+                                    if SectionItem.Active then
+                                        Tab:UpdateSectionLayout(nil, Left2)
+                                        Tab:UpdateSectionLayout(nil, Right2)
+                                    end
+                                end)
                             end
                         end
 
@@ -6787,6 +7325,7 @@ do
                             if SectionItem.Active then
                                 SectionItem.Active = false
                                 SectionItem.Hovering = false
+                                SectionsHolder2.Visible = false
 
                                 SectionItem:MoveSides(false)
                                 Icon.ImageColor3 = Color3.fromRGB(93, 93, 93)
@@ -6823,9 +7362,7 @@ do
                         end)
 
                         Library:Connection(Outline:GetAttributeChangedSignal("g"), function()
-                            if Outline:GetAttribute("g") == table.find(Window.Tabs, Tab) then
-                                SectionsHolder2.Visible = true
-                            end
+                            SectionsHolder2.Visible = SectionItem.Active and Outline:GetAttribute("g") == table.find(Window.Tabs, Tab)
                         end)
 
                         Library:Connection(SectionOutline:GetAttributeChangedSignal("g"), function()
@@ -7641,9 +8178,29 @@ do
             end
             Options = Style
             Options.Message = Options.Message or "Notification"
+            Options.Title = Options.Title == nil and "3Thirty" or Options.Title
             Options.Delay = Options.Delay == nil and 3 or Options.Delay
             Options.AccentColor = Options.AccentColor or Library.Theme.Default.Accent
-            Options.FontFace = Options.FontFace or Library.UI.NewFont
+            Options.FontFace = keybindFont
+            Options.TextSize = Library.UI.KeybindTextSize
+
+            local function EscapeRichText(Value)
+                return tostring(Value):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+            end
+
+            local function BuildText(Message)
+                local Body = EscapeRichText(Message)
+                if Options.Title == false then
+                    return Body
+                end
+
+                local Title = EscapeRichText(Options.Title)
+                local Color = Options.AccentColor
+                local Red = math.floor(Color.R * 255 + 0.5)
+                local Green = math.floor(Color.G * 255 + 0.5)
+                local Blue = math.floor(Color.B * 255 + 0.5)
+                return ('<font color="rgb(%d,%d,%d)">%s</font> : %s'):format(Red, Green, Blue, Title, Body)
+            end
 
             local PositionKeys = {
                 ["Top Left"] = "TopLeft",
@@ -7670,42 +8227,34 @@ do
                     Parameters:Destroy()
                     return if Success then Bounds else TextService:GetTextSize(PlainText, Options.TextSize, Enum.Font.SourceSans, Vector2.new(Width, 1000))
                 end
-                local BaseBounds = Measure(Options.MaxWidth - 28)
-                local Width = math.clamp(BaseBounds.X + 28, Options.MinWidth, Options.MaxWidth)
-                local Bounds = Measure(Width - 28)
-                return Width, math.max(30, Bounds.Y + 12)
+                local MaxWidth = math.max(1, Options.MaxWidth)
+                local BaseBounds = Measure(MaxWidth)
+                local Width = math.clamp(BaseBounds.X + 2, math.max(1, Options.MinWidth), MaxWidth)
+                local Bounds = Measure(Width)
+                return Width, math.max(16, Bounds.Y)
             end
 
-            local Width, Height = GetSize(Options.Message)
+            local Width, Height = GetSize(BuildText(Options.Message))
             local NotificationFrameObject = Library:CreateObject("Frame", {
                 Name = "Notification",
-                Position = UDim2.fromOffset(-Width - 12, 70),
+                Position = UDim2.fromOffset(0, 0),
                 Size = UDim2.fromOffset(Width, Height),
                 BorderSizePixel = 0,
                 ZIndex = 10000,
-                BackgroundColor3 = Options.BackgroundColor,
+                BackgroundColor3 = Color3.new(),
+                BackgroundTransparency = 1,
                 Active = Options.ClickToDismiss,
                 Parent = Library.UI.ScreenGUI
-            }, true)
-
-            local Accent = Library:CreateObject("Frame", {
-                Name = "Accent",
-                Position = UDim2.fromOffset(1, 1),
-                Size = UDim2.new(0, 2, 1, -2),
-                BorderSizePixel = 0,
-                ZIndex = 10001,
-                BackgroundColor3 = Options.AccentColor,
-                Parent = NotificationFrameObject
             }, true)
 
             local NotificationText = Library:CreateObject("TextLabel", {
                 FontFace = Options.FontFace,
                 TextColor3 = Options.TextColor,
                 BorderSizePixel = 0,
-                Text = Options.Message,
+                Text = BuildText(Options.Message),
                 Name = "Text",
-                Position = UDim2.fromOffset(14, 4),
-                Size = UDim2.new(1, -22, 1, -8),
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.fromScale(1, 1),
                 ZIndex = 10001,
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -7713,13 +8262,7 @@ do
                 TextWrapped = true,
                 RichText = true,
                 TextSize = Options.TextSize,
-                Parent = NotificationFrameObject
-            }, true)
-
-            local FrameStroke = Library:CreateObject("UIStroke", {
-                Thickness = 1,
-                Color = Options.OutlineColor,
-                Transparency = Options.OutlineTransparency,
+                TextStrokeTransparency = 1,
                 Parent = NotificationFrameObject
             }, true)
 
@@ -7727,8 +8270,6 @@ do
                 Class = "Notification",
                 Object = NotificationFrameObject,
                 Text = NotificationText,
-                Accent = Accent,
-                Stroke = FrameStroke,
                 Width = Width,
                 Height = Height,
                 Options = Options,
@@ -7739,18 +8280,6 @@ do
             local function GetViewport()
                 local CurrentCamera = Workspace.CurrentCamera or Camera
                 return CurrentCamera and CurrentCamera.ViewportSize or Viewport
-            end
-
-            local function GetExitPosition(Value)
-                local CurrentViewport = GetViewport()
-                if Options.Position:find("Left") then
-                    return UDim2.fromOffset(-Value.Width - 12, Value.Object.Position.Y.Offset)
-                elseif Options.Position:find("Right") then
-                    return UDim2.fromOffset(CurrentViewport.X + 12, Value.Object.Position.Y.Offset)
-                elseif Options.Position == "Bottom Center" then
-                    return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), CurrentViewport.Y + Value.Height + 12)
-                end
-                return UDim2.fromOffset(math.floor(CurrentViewport.X / 2 - Value.Width / 2), -Value.Height - 12)
             end
 
             function Notification:UpdatePositions()
@@ -7778,9 +8307,7 @@ do
                         elseif IsRight
                         then CurrentViewport.X - Offset.X - Value.Width
                         else Offset.X
-                    Library:TweenObject(Value.Object, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        Position = UDim2.fromOffset(X, Y),
-                    })
+                    Value.Object.Position = UDim2.fromOffset(X, Y)
                     if IsBottom then
                         Y -= Options.Spacing
                     else
@@ -7798,36 +8325,16 @@ do
                     table.remove(Path, Index)
                 end
 
-                if not NotificationFrameObject.Parent then
-                    return
+                if NotificationFrameObject.Parent then
+                    NotificationFrameObject:Destroy()
                 end
-
-                local FadeTime = math.min(Options.AnimationTime, 0.18)
-                Library:TweenObject(NotificationFrameObject, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-                    Position = GetExitPosition(Notification),
-                    BackgroundTransparency = 1,
-                })
-                Library:TweenObject(Accent, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-                    BackgroundTransparency = 1,
-                })
-                Library:TweenObject(NotificationText, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-                    TextTransparency = 1,
-                })
-                Library:TweenObject(FrameStroke, TweenInfo.new(FadeTime, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-                    Transparency = 1,
-                })
-
                 Notification:UpdatePositions()
-                task.delay(FadeTime + 0.02, function()
-                    if NotificationFrameObject.Parent then
-                        NotificationFrameObject:Destroy()
-                    end
-                end)
             end
 
             function Notification:UpdateText(Text)
                 if Notification.Removed or not NotificationFrameObject.Parent then return end
-                NotificationText.Text = tostring(Text)
+                Options.Message = tostring(Text)
+                NotificationText.Text = BuildText(Text)
                 Notification.Width, Notification.Height = GetSize(NotificationText.Text)
                 NotificationFrameObject.Size = UDim2.fromOffset(Notification.Width, Notification.Height)
                 Notification:UpdatePositions()
@@ -7838,62 +8345,29 @@ do
                 for Key, Value in NewStyle do
                     Options[Key] = Value
                 end
-                NotificationFrameObject.BackgroundColor3 = Options.BackgroundColor
-                NotificationFrameObject.BackgroundTransparency = Options.BackgroundTransparency
+                NotificationFrameObject.BackgroundTransparency = 1
                 NotificationText.TextColor3 = Options.TextColor
                 NotificationText.TextSize = Options.TextSize
-                NotificationText.FontFace = Options.FontFace
-                Accent.BackgroundColor3 = Options.AccentColor
-                FrameStroke.Color = Options.OutlineColor
-                FrameStroke.Transparency = Options.OutlineTransparency
+                NotificationText.FontFace = keybindFont
+                NotificationText.Text = BuildText(Options.Message)
                 Notification.Width, Notification.Height = GetSize(NotificationText.Text)
                 NotificationFrameObject.Size = UDim2.fromOffset(Notification.Width, Notification.Height)
                 Notification:UpdatePositions()
             end
 
-            function Notification:SetProgress(Value, Color)
-                if Notification.Removed then return end
-                if not Notification.Progress then
-                    Notification.Progress = Library:CreateObject("Frame", {
-                        Name = "Progress",
-                        AnchorPoint = Vector2.new(0, 1),
-                        Position = UDim2.fromScale(0, 1),
-                        Size = UDim2.fromScale(1, 0.06),
-                        BorderSizePixel = 0,
-                        ZIndex = 10002,
-                        BackgroundColor3 = Color or Options.AccentColor,
-                        Parent = NotificationFrameObject,
-                    }, true)
-                end
-                Notification.Progress.BackgroundColor3 = Color or Notification.Progress.BackgroundColor3
-                Notification.Progress.Size = UDim2.new(math.clamp(tonumber(Value) or 0, 0, 1), 0, 0, 2)
+            function Notification:SetProgress()
+                return Notification
             end
 
             Notification.Dismiss = Notification.RemoveFrame
 
             NotificationFrameObject.BackgroundTransparency = 1
-            Accent.BackgroundTransparency = 1
-            NotificationText.TextTransparency = 1
-            FrameStroke.Transparency = 1
-            NotificationFrameObject.Position = GetExitPosition(Notification)
 
             table.insert(Path, 1, Notification)
             while #Path > Options.StackLimit do
                 Path[#Path]:RemoveFrame()
             end
             Notification:UpdatePositions()
-            Library:TweenObject(NotificationFrameObject, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                BackgroundTransparency = Options.BackgroundTransparency,
-            })
-            Library:TweenObject(Accent, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                BackgroundTransparency = 0,
-            })
-            Library:TweenObject(NotificationText, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                TextTransparency = 0,
-            })
-            Library:TweenObject(FrameStroke, TweenInfo.new(Options.AnimationTime, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                Transparency = Options.OutlineTransparency,
-            })
 
             if Options.ClickToDismiss then
                 Library:Connection(NotificationFrameObject.InputBegan, function(Input)
@@ -7997,8 +8471,10 @@ do
             table.clear(Library.Tweens)
             table.clear(Library.Objects)
             table.clear(Library.Theme.Objects)
+            table.clear(Library.Keybinds)
             Library.UI.MainUI = nil
             Library.UI.ScreenGUI = nil
+            Library.UI.KeybindViewer = nil
         end
 
         function Library:Disable()
