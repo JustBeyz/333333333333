@@ -1,7 +1,8 @@
-if getgenv().ThreeThirty then
-    pcall(getgenv().ThreeThirty.Unload, getgenv().ThreeThirty)
+local previousThreeThirty = getgenv().ThreeThirty
+if previousThreeThirty and type(previousThreeThirty.Unload) == "function" then
+    pcall(previousThreeThirty.Unload, previousThreeThirty)
 end
-if Library and Library.Unload then
+if Library and type(Library.Unload) == "function" then
     pcall(Library.Unload, Library)
 end
 local Workspace = game:GetService("Workspace")
@@ -28,7 +29,9 @@ local function EnsureFolder(Path)
     local Current = ""
     for Part in tostring(Path):gmatch("[^/]+") do
         Current = Current == "" and Part or Current .. "/" .. Part
-        pcall(makefolder, Current)
+        if not isfolder(Current) then
+            pcall(makefolder, Current)
+        end
     end
 end
 
@@ -293,10 +296,7 @@ do
         end
 
         local function Measure(Text)
-            local Success, Result = pcall(function()
-                return TextService:GetTextSize(Text, Library.UI.FontSize, Enum.Font.SourceSans, Vector2.new(100000, 100000)).X
-            end)
-            return Success and Result or (#Text * Library.UI.FontSize * 0.55)
+            return TextService:GetTextSize(Text, Library.UI.FontSize, Enum.Font.SourceSans, Vector2.new(100000, 100000)).X
         end
 
         if Measure(String) <= MaxWidth then
@@ -412,8 +412,8 @@ do
                 and (Control.GetConfig or Control.Get)
             then
                 local Getter = Control.GetConfig or Control.Get
-                local Success, CurrentValue = pcall(Getter, Control)
-                if Success and CurrentValue ~= nil then
+                local CurrentValue = Getter(Control)
+                if CurrentValue ~= nil then
                     Values[Index] = SerializeConfigValue(CurrentValue)
                 end
             end
@@ -429,7 +429,7 @@ do
         local Decoded = Config
         if typeof(Config) == "string" then
             local Success
-            Success, Decoded = pcall(HttpService.JSONDecode, HttpService, Config)
+                    Success, Decoded = pcall(HttpService.JSONDecode, HttpService, Config)
             if not Success then
                 return false
             end
@@ -563,8 +563,8 @@ do
             local masterEnabled = true
             local masterToggle = keybind.MasterToggle
             if masterToggle then
-                local checked, state = pcall(masterToggle.GetState, masterToggle)
-                masterEnabled = checked and state == true
+                local state = masterToggle:GetState()
+                masterEnabled = state == true
             end
             if not keybind.HideFromList and masterEnabled and bind ~= "[-]" then
                 rows += 1
@@ -8451,16 +8451,16 @@ do
             end
 
             for Index, Value in Library.Connections do
-                pcall(function() Value:Disconnect() end)
+                Value:Disconnect()
             end
 
             for _, Tween in Library.Tweens do
-                pcall(function() Tween:Cancel() end)
+                Tween:Cancel()
             end
 
             for _, Objects in Library.Objects do
                 if Objects[1] then
-                    pcall(function() Objects[1]:Destroy() end)
+                    Objects[1]:Destroy()
                 end
             end
 
