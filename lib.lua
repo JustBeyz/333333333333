@@ -952,28 +952,27 @@ function Library:ShowPopup(Frame)
         Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     end
 
-    task.defer(function()
-        if PopupAnimationTokens[Frame] ~= AnimationToken or not Frame.Visible then
-            return
-        end
+	-- Start the transition synchronously. Deferring this to the next task step
+	-- allowed the input handlers for the same click to invalidate the opening
+	-- token before a show tween was ever created.
+	Frame.Position = DropPosition
+	local ShowProperties = {
+		Position = FinalPosition
+	}
+	for Property, Value in next, FrameVisualProperties or {} do
+		ShowProperties[Property] = Value
+	end
 
-        Frame.Position = DropPosition
-        local ShowProperties = {
-            Position = FinalPosition
-        }
-        for Property, Value in next, FrameVisualProperties or {} do
-            ShowProperties[Property] = Value
-        end
-
-        local ShowTween = Library:Tween(Frame, 0.18, ShowProperties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-        if ShowTween then
-            ShowTween.Completed:Connect(function(State)
-                if State == Enum.PlaybackState.Completed and PopupAnimationTokens[Frame] == AnimationToken then
-                    PopupOpenStates[Frame] = "Open"
-                end
-            end)
-        end
-    end)
+	local ShowTween = Library:Tween(Frame, 0.18, ShowProperties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+	if ShowTween then
+		ShowTween.Completed:Connect(function(State)
+			if State == Enum.PlaybackState.Completed and PopupAnimationTokens[Frame] == AnimationToken then
+				PopupOpenStates[Frame] = "Open"
+			end
+		end)
+	else
+		PopupOpenStates[Frame] = "Open"
+	end
 end
 
 function Library:HidePopup(Frame)
