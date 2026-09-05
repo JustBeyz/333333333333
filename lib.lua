@@ -891,20 +891,25 @@ function Library:Tween(Instance, Duration, Properties, EasingStyle, EasingDirect
         ActiveTweens[Instance] = nil
     end
 
-    local Created, Tween = pcall(TweenService.Create, TweenService, Instance,
-        TweenInfo.new(Duration or 0.12, EasingStyle or Enum.EasingStyle.Quad, EasingDirection or Enum.EasingDirection.Out),
-        Properties
-    )
+    local Created, Tween = pcall(function()
+        local NewTween = TweenService:Create(
+            Instance,
+            TweenInfo.new(Duration or 0.12, EasingStyle or Enum.EasingStyle.Quad, EasingDirection or Enum.EasingDirection.Out),
+            Properties
+        )
+        ActiveTweens[Instance] = NewTween
+        NewTween.Completed:Connect(function()
+            if ActiveTweens[Instance] == NewTween then
+                ActiveTweens[Instance] = nil
+            end
+        end)
+        NewTween:Play()
+        return NewTween
+    end)
     if not Created or not Tween then
+        ActiveTweens[Instance] = nil
         return nil
     end
-    ActiveTweens[Instance] = Tween
-    Tween.Completed:Connect(function()
-        if ActiveTweens[Instance] == Tween then
-            ActiveTweens[Instance] = nil
-        end
-    end)
-    Tween:Play()
 
     return Tween
 end
@@ -952,9 +957,6 @@ function Library:ShowPopup(Frame)
                     OriginalProperties[Property] = Value
                 end
                 Properties[Property] = OriginalProperties[Property]
-                pcall(function()
-                    Target[Property] = 1
-                end)
             end
             Targets[Target] = Properties
         end
@@ -981,15 +983,11 @@ function Library:ShowPopup(Frame)
     Frame.Position = FinalPosition
 
     for Target, Properties in next, Targets do
-        local Tween = Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-        if not Tween then
-            SetPopupProperties(Target, Properties)
-        end
+        SetPopupProperties(Target, Properties)
     end
 
-    -- Start the transition synchronously. Deferring this to the next task step
-    -- allowed the input handlers for the same click to invalidate the opening
-    -- token before a show tween was ever created.
+    -- Restore the visual state before animating. A popup must remain usable
+    -- even if the optional visual tween is interrupted by another input.
     Frame.Position = DropPosition
     local ShowProperties = {
         Position = FinalPosition
@@ -998,7 +996,10 @@ function Library:ShowPopup(Frame)
         ShowProperties[Property] = Value
     end
 
-    local ShowTween = Library:Tween(Frame, 0.18, ShowProperties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    SetPopupProperties(Frame, FrameVisualProperties or {})
+    local ShowTween = Library:Tween(Frame, 0.18, {
+        Position = FinalPosition
+    }, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     if ShowTween then
         ShowTween.Completed:Connect(function(State)
             if State == Enum.PlaybackState.Completed and PopupAnimationTokens[Frame] == AnimationToken then
@@ -1007,11 +1008,15 @@ function Library:ShowPopup(Frame)
         end)
     else
         SetPopupProperties(Frame, ShowProperties)
-        PopupOpenStates[Frame] = "Open"
     end
 
     task.delay(0.24, function()
         if PopupAnimationTokens[Frame] == AnimationToken and Frame.Visible then
+            for Target, Properties in next, Targets do
+                SetPopupProperties(Target, Properties)
+            end
+            SetPopupProperties(Frame, ShowProperties)
+            Frame.Position = FinalPosition
             PopupOpenStates[Frame] = "Open"
         end
     end)
@@ -2283,7 +2288,6 @@ do
                             OriginalProperties[Property] = Value
                         end
                         Properties[Property] = OriginalProperties[Property]
-                        Target[Property] = 1
                     end
 
                     Targets[Target] = Properties
@@ -2334,10 +2338,7 @@ do
                 ModeSelectOuter.Position = OffsetPosition
 
                 for Target, Properties in next, VisualTargets do
-                    local Tween = Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-                    if not Tween then
-                        SetPopupProperties(Target, Properties)
-                    end
+                    SetPopupProperties(Target, Properties)
                 end
 
                 local ShowTween = Library:Tween(ModeSelectOuter, 0.18, {
