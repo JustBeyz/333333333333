@@ -854,6 +854,32 @@ local function NextPopupAnimationToken(Frame)
     return Token
 end
 
+local function GetPopupTargets(Frame)
+    local Targets = { Frame }
+    for _, Descendant in next, Frame:GetDescendants() do
+        table.insert(Targets, Descendant)
+    end
+    return Targets
+end
+
+local function CancelPopupTweens(Frame)
+    for _, Target in next, GetPopupTargets(Frame) do
+        local Tween = ActiveTweens[Target]
+        if Tween then
+            Tween:Cancel()
+            ActiveTweens[Target] = nil
+        end
+    end
+end
+
+local function SetPopupProperties(Instance, Properties)
+    for Property, Value in next, Properties do
+        pcall(function()
+            Instance[Property] = Value
+        end)
+    end
+end
+
 function Library:Tween(Instance, Duration, Properties, EasingStyle, EasingDirection)
     if not Instance or not Properties then
         return nil
@@ -862,13 +888,16 @@ function Library:Tween(Instance, Duration, Properties, EasingStyle, EasingDirect
     local PreviousTween = ActiveTweens[Instance]
     if PreviousTween then
         PreviousTween:Cancel()
+        ActiveTweens[Instance] = nil
     end
 
-    local Tween = TweenService:Create(
-        Instance,
+    local Created, Tween = pcall(TweenService.Create, TweenService, Instance,
         TweenInfo.new(Duration or 0.12, EasingStyle or Enum.EasingStyle.Quad, EasingDirection or Enum.EasingDirection.Out),
         Properties
     )
+    if not Created or not Tween then
+        return nil
+    end
     ActiveTweens[Instance] = Tween
     Tween.Completed:Connect(function()
         if ActiveTweens[Instance] == Tween then
@@ -885,13 +914,14 @@ function Library:ShowPopup(Frame)
         return
     end
 
+    local PreviousPopupState = PopupOpenStates[Frame]
     local AnimationToken = NextPopupAnimationToken(Frame)
     PopupOpenStates[Frame] = "Opening"
+    local WasAnimating = ActiveTweens[Frame] ~= nil
+    local WasOpeningOrClosing = PreviousPopupState == "Opening" or PreviousPopupState == "Closing"
+    CancelPopupTweens(Frame)
 
-    local FadeTargets = { Frame }
-    for _, Descendant in next, Frame:GetDescendants() do
-        table.insert(FadeTargets, Descendant)
-    end
+    local FadeTargets = GetPopupTargets(Frame)
 
     local Targets = {}
     for _, Target in next, FadeTargets do
@@ -922,14 +952,16 @@ function Library:ShowPopup(Frame)
                     OriginalProperties[Property] = Value
                 end
                 Properties[Property] = OriginalProperties[Property]
-                Target[Property] = 1
+                pcall(function()
+                    Target[Property] = 1
+                end)
             end
             Targets[Target] = Properties
         end
     end
 
     local FinalPosition = Frame.Position
-    if ActiveTweens[Frame] and PopupPositions[Frame] then
+    if (WasAnimating or WasOpeningOrClosing) and PopupPositions[Frame] then
         FinalPosition = PopupPositions[Frame]
     end
     PopupPositions[Frame] = FinalPosition
@@ -949,30 +981,40 @@ function Library:ShowPopup(Frame)
     Frame.Position = FinalPosition
 
     for Target, Properties in next, Targets do
-        Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        local Tween = Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+        if not Tween then
+            SetPopupProperties(Target, Properties)
+        end
     end
 
-	-- Start the transition synchronously. Deferring this to the next task step
-	-- allowed the input handlers for the same click to invalidate the opening
-	-- token before a show tween was ever created.
-	Frame.Position = DropPosition
-	local ShowProperties = {
-		Position = FinalPosition
-	}
-	for Property, Value in next, FrameVisualProperties or {} do
-		ShowProperties[Property] = Value
-	end
+    -- Start the transition synchronously. Deferring this to the next task step
+    -- allowed the input handlers for the same click to invalidate the opening
+    -- token before a show tween was ever created.
+    Frame.Position = DropPosition
+    local ShowProperties = {
+        Position = FinalPosition
+    }
+    for Property, Value in next, FrameVisualProperties or {} do
+        ShowProperties[Property] = Value
+    end
 
-	local ShowTween = Library:Tween(Frame, 0.18, ShowProperties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-	if ShowTween then
-		ShowTween.Completed:Connect(function(State)
-			if State == Enum.PlaybackState.Completed and PopupAnimationTokens[Frame] == AnimationToken then
-				PopupOpenStates[Frame] = "Open"
-			end
-		end)
-	else
-		PopupOpenStates[Frame] = "Open"
-	end
+    local ShowTween = Library:Tween(Frame, 0.18, ShowProperties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    if ShowTween then
+        ShowTween.Completed:Connect(function(State)
+            if State == Enum.PlaybackState.Completed and PopupAnimationTokens[Frame] == AnimationToken then
+                PopupOpenStates[Frame] = "Open"
+            end
+        end)
+    else
+        SetPopupProperties(Frame, ShowProperties)
+        PopupOpenStates[Frame] = "Open"
+    end
+
+    task.delay(0.24, function()
+        if PopupAnimationTokens[Frame] == AnimationToken and Frame.Visible then
+            PopupOpenStates[Frame] = "Open"
+        end
+    end)
 end
 
 function Library:HidePopup(Frame)
@@ -980,8 +1022,14 @@ function Library:HidePopup(Frame)
         return
     end
 
+    if not Frame.Visible and PopupOpenStates[Frame] ~= "Opening" then
+        PopupOpenStates[Frame] = "Closed"
+        return
+    end
+
     local AnimationToken = NextPopupAnimationToken(Frame)
     PopupOpenStates[Frame] = "Closing"
+    CancelPopupTweens(Frame)
 
     local FinalPosition = PopupPositions[Frame] or Frame.Position
     PopupPositions[Frame] = FinalPosition
@@ -992,10 +1040,7 @@ function Library:HidePopup(Frame)
         FinalPosition.Y.Offset - math.max(6, math.floor(10 * DPIScale))
     )
 
-    local FadeTargets = { Frame }
-    for _, Descendant in next, Frame:GetDescendants() do
-        table.insert(FadeTargets, Descendant)
-    end
+    local FadeTargets = GetPopupTargets(Frame)
 
     local FrameHideProperties = {}
     for _, Target in next, FadeTargets do
@@ -1019,7 +1064,10 @@ function Library:HidePopup(Frame)
                     FrameHideProperties[Property] = Value
                 end
             else
-                Library:Tween(Target, 0.12, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
+                local Tween = Library:Tween(Target, 0.12, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
+                if not Tween then
+                    SetPopupProperties(Target, Properties)
+                end
             end
         end
     end
@@ -1041,9 +1089,18 @@ function Library:HidePopup(Frame)
             end
         end)
     else
+        SetPopupProperties(Frame, HideProperties)
         Frame.Visible = false
         PopupOpenStates[Frame] = "Closed"
     end
+
+    task.delay(0.18, function()
+        if PopupAnimationTokens[Frame] == AnimationToken and PopupOpenStates[Frame] == "Closing" then
+            SetPopupProperties(Frame, { Position = FinalPosition })
+            Frame.Visible = false
+            PopupOpenStates[Frame] = "Closed"
+        end
+    end)
 end
 
 function Library:SetTextSize(Size)
@@ -2263,13 +2320,24 @@ do
                 FinalPosition.Y.Offset - ModePickerOffset
             )
 
+            for _, Target in next, GetModePickerVisualTargets() do
+                local Tween = ActiveTweens[Target]
+                if Tween then
+                    Tween:Cancel()
+                    ActiveTweens[Target] = nil
+                end
+            end
+
             if Visible then
                 local VisualTargets = PrepareModePickerVisuals()
                 ModeSelectOuter.Visible = true
                 ModeSelectOuter.Position = OffsetPosition
 
                 for Target, Properties in next, VisualTargets do
-                    Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+                    local Tween = Library:Tween(Target, 0.14, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+                    if not Tween then
+                        SetPopupProperties(Target, Properties)
+                    end
                 end
 
                 local ShowTween = Library:Tween(ModeSelectOuter, 0.18, {
@@ -2281,13 +2349,36 @@ do
                             ModeSelectOuter.Position = FinalPosition
                         end
                     end)
+                else
+                    ModeSelectOuter.Position = FinalPosition
                 end
+
+                task.delay(0.24, function()
+                    if ModePickerAnimationId == AnimationId and ModeSelectOuter.Visible then
+                        ModeSelectOuter.Position = FinalPosition
+                    end
+                end)
             else
                 if not ModeSelectOuter.Visible then
                     return
                 end
 
-                HideModePickerVisuals()
+                for _, Target in next, GetModePickerVisualTargets() do
+                    local Properties = {}
+                    local OriginalProperties = ModePickerVisualState[Target]
+                    if OriginalProperties then
+                        for Property in next, OriginalProperties do
+                            Properties[Property] = 1
+                        end
+                    end
+
+                    if next(Properties) then
+                        local Tween = Library:Tween(Target, 0.12, Properties, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
+                        if not Tween then
+                            SetPopupProperties(Target, Properties)
+                        end
+                    end
+                end
                 local HideTween = Library:Tween(ModeSelectOuter, 0.12, {
                     Position = OffsetPosition;
                 }, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
@@ -2302,6 +2393,13 @@ do
                     ModeSelectOuter.Visible = false
                     ModeSelectOuter.Position = FinalPosition
                 end
+
+                task.delay(0.18, function()
+                    if ModePickerAnimationId == AnimationId and ModeSelectOuter.Visible then
+                        ModeSelectOuter.Visible = false
+                        ModeSelectOuter.Position = FinalPosition
+                    end
+                end)
             end
         end
 
