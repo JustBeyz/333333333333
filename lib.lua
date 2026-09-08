@@ -96,6 +96,26 @@ local AssetStorage = {
     Fonts = "fyntra/fonts";
 }
 
+local Fonts = {
+    ProggyTiny = {
+        Ttf = "ProggyTiny.ttf",
+        Url = "https://github.com/ocornut/imgui/raw/master/misc/fonts/ProggyTiny.ttf",
+    },
+    ProggyClean = {
+        Ttf = "ProggyClean.ttf",
+        Url = "https://github.com/ocornut/imgui/raw/master/misc/fonts/ProggyClean.ttf",
+    },
+    ["XP Tahoma"] = {
+        Ttf = "XP Tahoma.ttf",
+        Url = "https://github.com/sametexe001/luas/raw/refs/heads/main/fonts/TAHOMA-8PT-BOLD-WINDOWS-XP.TTF",
+    },
+    ["Smallest Pixel"] = {
+        Ttf = "smallest_pixel-7.ttf",
+        Url = "https://raw.githubusercontent.com/sametexe001/luas/main/smallest_pixel-7.ttf",
+    },
+}
+local FontNames = { "ProggyTiny", "ProggyClean", "XP Tahoma", "Smallest Pixel" }
+
 local CustomImageManager = {}
 local CustomImageManagerAssets = {
     Cursor = {
@@ -308,8 +328,8 @@ do
     end
 end
 
-local ProggyCleanFont = Enum.Font.Code
-local ProggyCleanFontFace = nil
+local LoadedFontFaces = {}
+local FailedFonts = {}
 
 local function EnsureAssetDirectory(Path: string, IsFile: boolean?)
     if not makefolder then
@@ -337,57 +357,80 @@ local function EnsureAssetDirectory(Path: string, IsFile: boolean?)
     end
 end
 
-local function LoadProggyCleanFont()
-    if not getcustomasset or not writefile then
-        return nil, "getcustomasset or writefile is unavailable"
+local function LoadFont(Name)
+    if LoadedFontFaces[Name] then
+        return LoadedFontFaces[Name]
+    end
+    if FailedFonts[Name] then
+        return nil, FailedFonts[Name]
     end
 
-    local fonts = AssetStorage.Fonts
-    local path = fonts .. "/ProggyClean.ttf"
-    local familyPath = fonts .. "/ProggyClean.json"
-    EnsureAssetDirectory(path, true)
+    local FontData = Fonts[Name]
+    if not FontData then
+        FailedFonts[Name] = "unknown font"
+        return nil, FailedFonts[Name]
+    end
+    if not getcustomasset or not writefile then
+        FailedFonts[Name] = "getcustomasset or writefile is unavailable"
+        return nil, FailedFonts[Name]
+    end
+
+    local FontPath = AssetStorage.Fonts .. "/" .. FontData.Ttf
+    local FamilyPath = AssetStorage.Fonts .. "/" .. Name .. ".json"
+    EnsureAssetDirectory(FontPath, true)
 
     local HasFont = false
     if isfile then
-        local Success, Exists = ErrorFriendlyPCall(isfile, path)
+        local Success, Exists = ErrorFriendlyPCall(isfile, FontPath)
         HasFont = Success and Exists == true
     end
 
     if not HasFont then
         local Success, ErrorMessage = ErrorFriendlyPCall(function()
-            writefile(path, game:HttpGet("https://github.com/ocornut/imgui/raw/master/misc/fonts/ProggyClean.ttf"))
+            writefile(FontPath, game:HttpGet(FontData.Url))
         end)
         if not Success then
+            FailedFonts[Name] = ErrorMessage
             return nil, ErrorMessage
         end
     end
 
-    local AssetSuccess, Asset = ErrorFriendlyPCall(getcustomasset, path)
+    local AssetSuccess, Asset = ErrorFriendlyPCall(getcustomasset, FontPath)
     if not AssetSuccess or not Asset then
+        FailedFonts[Name] = Asset
         return nil, Asset
     end
 
     local FamilySuccess, FamilyError = ErrorFriendlyPCall(function()
-        writefile(familyPath, game:GetService("HttpService"):JSONEncode({
-        name = "ProggyClean",
-        faces = {{
-            name = "Regular",
-            weight = Enum.FontWeight.Regular.Value,
-            style = "normal",
-            assetId = Asset,
-        }},
+        writefile(FamilyPath, game:GetService("HttpService"):JSONEncode({
+            name = Name,
+            faces = {{
+                name = "Regular",
+                weight = Enum.FontWeight.Regular.Value,
+                style = "normal",
+                assetId = Asset,
+            }},
         }))
     end)
     if not FamilySuccess then
+        FailedFonts[Name] = FamilyError
         return nil, FamilyError
     end
 
-    local FamilyAssetSuccess, FamilyAsset = ErrorFriendlyPCall(getcustomasset, familyPath)
+    local FamilyAssetSuccess, FamilyAsset = ErrorFriendlyPCall(getcustomasset, FamilyPath)
     if not FamilyAssetSuccess or not FamilyAsset then
+        FailedFonts[Name] = FamilyAsset
         return nil, FamilyAsset
     end
 
-    return Font.new(FamilyAsset, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    local FontFaceSuccess, FontFace = ErrorFriendlyPCall(Font.new, FamilyAsset, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+    if not FontFaceSuccess or not FontFace then
+        FailedFonts[Name] = FontFace
+        return nil, FontFace
+    end
+
+    LoadedFontFaces[Name] = FontFace
+    return FontFace
 end
 
 local DPIScale = 1;
@@ -413,8 +456,8 @@ local Library = {
 
     Black = Color3.new(0, 0, 0);
     Inline = Color3.new(0, 0, 0);
-    Font = ProggyCleanFont;
-    FontFace = ProggyCleanFontFace;
+    Font = Enum.Font.Code;
+    FontFace = nil;
     FontName = "ProggyClean";
     FontSize = 12;
     TextSize = 12;
@@ -724,12 +767,39 @@ function Library:Create(Class, Properties)
 end
 
 function Library:GetFontNames()
-    return { "ProggyClean" }
+    local Names = {}
+    for Index, Name in ipairs(FontNames) do
+        Names[Index] = Name
+    end
+    return Names
 end
 
-function Library:ApplyFont(Instance)
+function Library:ApplyFontByName(Instance, Name)
     if not Instance then
-        return
+        return false
+    end
+
+    Name = tostring(Name or Library.FontName or "ProggyClean")
+    local FontFace = LoadFont(Name)
+    if FontFace then
+        pcall(function()
+            Instance.FontFace = FontFace
+        end)
+        pcall(function()
+            Instance.Font = Enum.Font.Code
+        end)
+        return true
+    end
+
+    local FontEnum = Enum.Font[Name]
+    if FontEnum then
+        pcall(function()
+            Instance.FontFace = Font.fromEnum(FontEnum)
+        end)
+        pcall(function()
+            Instance.Font = FontEnum
+        end)
+        return true
     end
 
     if Library.FontFace then
@@ -738,9 +808,14 @@ function Library:ApplyFont(Instance)
         end)
     else
         pcall(function()
-            Instance.Font = Library.Font
+            Instance.Font = Library.Font or Enum.Font.Code
         end)
     end
+    return false
+end
+
+function Library:ApplyFont(Instance)
+    return Library:ApplyFontByName(Instance, Library.FontName)
 end
 
 function Library:ApplyFontOffset(TextInstance)
@@ -772,23 +847,18 @@ function Library:UpdateFont()
 end
 
 function Library:SetFont(Name)
-    if Name ~= "ProggyClean" then
+    if not Fonts[Name] then
         return false
     end
 
-    if not ProggyCleanFontFace then
-        local success, loadedFont, loadError = ErrorFriendlyPCall(LoadProggyCleanFont)
-        if success and loadedFont then
-            ProggyCleanFontFace = loadedFont
-            ProggyCleanFont = loadedFont
-        elseif loadError then
-            warn("[Forma Library] ProggyClean could not be loaded: " .. tostring(loadError))
-        end
+    local FontFace, LoadError = LoadFont(Name)
+    if not FontFace and LoadError then
+        warn("[Forma Library] " .. tostring(Name) .. " could not be loaded: " .. tostring(LoadError))
     end
 
     Library.FontName = Name
-    Library.Font = ProggyCleanFont
-    Library.FontFace = ProggyCleanFontFace
+    Library.Font = Enum.Font.Code
+    Library.FontFace = FontFace
     Library:UpdateFont()
     return true
 end
@@ -831,8 +901,8 @@ function Library:SetAssetStorage(Storage)
     AssetStorage.Fonts = Fonts
     CustomImageManager.RefreshAssets()
 
-    ProggyCleanFont = Enum.Font.Code
-    ProggyCleanFontFace = nil
+    table.clear(LoadedFontFaces)
+    table.clear(FailedFonts)
     Library:SetFont("ProggyClean")
 
     if Library.WatermarkIconImage and Library.SetWatermarkIcon then
@@ -7470,22 +7540,7 @@ do
 
         function ESP:ApplyFont(Label)
             local FontName = tostring(self.Settings.Font or "ProggyClean")
-            if FontName == "ProggyClean" then
-                Library:ApplyFont(Label)
-                return
-            end
-
-            local FontEnum = Enum.Font[FontName]
-            if FontEnum then
-                pcall(function()
-                    Label.FontFace = Font.fromEnum(FontEnum)
-                end)
-                pcall(function()
-                    Label.Font = FontEnum
-                end)
-            else
-                Library:ApplyFont(Label)
-            end
+            Library:ApplyFontByName(Label, FontName)
         end
 
         function ESP:GetElementPosition(Name, Default)
@@ -7747,7 +7802,7 @@ do
 
         function ESP:SetFont(Name)
             Name = tostring(Name or "ProggyClean")
-            if Name ~= "ProggyClean" and not Enum.Font[Name] then
+            if not Fonts[Name] then
                 return false
             end
             self.Settings.Font = Name
@@ -8143,7 +8198,7 @@ do
         })
         Controls.Font = Groupbox:AddDropdown(Prefix .. "Font", {
             Text = "font";
-            Values = { "ProggyClean", "Code", "Arial", "Gotham" };
+            Values = Library:GetFontNames();
             Default = Settings.Font;
             Callback = function(Value)
                 ESP:SetFont(Value)
