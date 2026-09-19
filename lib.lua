@@ -7040,15 +7040,16 @@ do
         }
 
         local BoxOuter = Library:Create("Frame", {
-            BackgroundColor3 = Color3.new(0, 0, 0);
-            BorderColor3 = Color3.new(0, 0, 0);
+            BackgroundColor3 = Library.Inline;
+            BorderColor3 = Library.Inline;
             Size = UDim2.new(1, -2, 0, 507 + 2);
             ZIndex = 2;
             Parent = ParentGroupbox.Side == 1 and Tab.LeftSideFrame or Tab.RightSideFrame;
         })
 
         Library:AddToRegistry(BoxOuter, {
-            BorderColor3 = "Black";
+            BackgroundColor3 = "Inline";
+            BorderColor3 = "Inline";
         })
 
         local BoxInner = Library:Create("Frame", {
@@ -9135,7 +9136,9 @@ function Library:CreateWindow(...)
 
     local MainSectionOuter = Library:Create("Frame", {
         BackgroundColor3 = Library.BackgroundColor;
-        BorderSizePixel = 0;
+        BorderColor3 = Library.OutlineColor;
+        BorderMode = Enum.BorderMode.Inset;
+        BorderSizePixel = 1;
         Position = UDim2.new(0, 1, 0, 1);
         Size = UDim2.new(1, -2, 1, -2);
         ZIndex = 1;
@@ -9144,6 +9147,7 @@ function Library:CreateWindow(...)
 
     Library:AddToRegistry(MainSectionOuter, {
         BackgroundColor3 = "BackgroundColor";
+        BorderColor3 = "OutlineColor";
     })
 
     local TabArea = Library:Create("ScrollingFrame", {
@@ -10147,15 +10151,16 @@ end
             }
 
             local BoxOuter = Library:Create("Frame", {
-                BackgroundColor3 = Color3.new(0, 0, 0);
-                BorderColor3 = Color3.new(0, 0, 0);
+                BackgroundColor3 = Library.Inline;
+                BorderColor3 = Library.Inline;
                 Size = UDim2.new(1, -2, 0, 507 + 2);
                 ZIndex = 2;
                 Parent = Info.Side == 1 and LeftSide or RightSide;
             })
 
             Library:AddToRegistry(BoxOuter, {
-                BorderColor3 = "Black";
+                BackgroundColor3 = "Inline";
+                BorderColor3 = "Inline";
             })
 
             local BoxInner = Library:Create("Frame", {
@@ -10223,7 +10228,7 @@ end
             Groupbox.Container = Container
             setmetatable(Groupbox, BaseGroupbox)
 
-            Groupbox:AddBlank(3)
+            Groupbox:AddBlank(4)
             Groupbox:Resize()
 
             Tab.Groupboxes[Info.Name] = Groupbox
