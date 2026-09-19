@@ -2960,7 +2960,7 @@ do
             BackgroundColor3 = ColorPicker.Value;
             BorderColor3 = Library:GetDarkerColor(ColorPicker.Value);
             BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(0, 15, 0, 15);
+            Size = UDim2.new(0, 22, 0, 13);
             ZIndex = 6;
             Parent = ToggleLabel;
         })
@@ -2969,7 +2969,7 @@ do
         -- local CheckerFrame = 
         Library:Create("ImageLabel", {
             BorderSizePixel = 0;
-            Size = UDim2.new(0, 13, 0, 13);
+            Size = UDim2.new(0, 20, 0, 11);
             ZIndex = 5;
             Image = CustomImageManager.GetAsset("Checker");
             Visible = not not Info.Transparency;
@@ -5057,11 +5057,12 @@ do
         })
 
         local ToggleLabel = Library:CreateLabel({
-            Size = UDim2.new(1, -19, 0, 11); -- size of toggle box (13) + size offset of previous layout (6)
+            Size = UDim2.new(1, -19, 0, 13); -- size of toggle box (13) + size offset of previous layout (6)
             Position = UDim2.new(0, 0, 0, 0);
             TextSize = 14;
             Text = Info.Text;
             TextXAlignment = Enum.TextXAlignment.Left;
+            TextYAlignment = Enum.TextYAlignment.Center;
             ZIndex = 6;
             Parent = ToggleContainer;
             RichText = true;
@@ -5071,6 +5072,7 @@ do
             Padding = UDim.new(0, 4);
             FillDirection = Enum.FillDirection.Horizontal;
             HorizontalAlignment = Enum.HorizontalAlignment.Right;
+            VerticalAlignment = Enum.VerticalAlignment.Center;
             SortOrder = Enum.SortOrder.LayoutOrder;
             Parent = ToggleLabel;
         })
@@ -7059,7 +7061,8 @@ do
             BackgroundColor3 = Library.BackgroundColor;
             BorderColor3 = Library.OutlineColor;
             BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
+            Position = UDim2.new(0, 0, 0, 10);
+            Size = UDim2.new(1, 0, 1, -10);
             ZIndex = 4;
             Parent = BoxOuter;
         })
@@ -7072,27 +7075,20 @@ do
         local Highlight = Library:Create("Frame", {
             BackgroundColor3 = Library.AccentColor;
             BorderSizePixel = 0;
-            Size = UDim2.new(1, 0, 0, 2);
+            Position = UDim2.new(0, 1, 0, 1);
+            Size = UDim2.new(1, -2, 0, 2);
             ZIndex = 5;
-            Parent = BoxInner;
+            Parent = BoxOuter;
         })
 
         Library:AddToRegistry(Highlight, {
             BackgroundColor3 = "AccentColor";
         })
 
-        local Container = Library:Create("Frame", {
-            BackgroundTransparency = 1;
-            Position = UDim2.new(0, 4, 0, 10);
-            Size = UDim2.new(1, -4, 1, -10);
-            ZIndex = 1;
-            Parent = BoxInner;
-        })
-
         Library:Create("UIListLayout", {
             FillDirection = Enum.FillDirection.Vertical;
             SortOrder = Enum.SortOrder.LayoutOrder;
-            Parent = Container;
+            Parent = BoxInner;
         })
 
         function DepGroupbox:Resize()
@@ -7134,7 +7130,7 @@ do
             DepGroupbox:Update()
         end
 
-        DepGroupbox.Container = Container
+        DepGroupbox.Container = BoxInner
         setmetatable(DepGroupbox, BaseGroupbox)
 
         DepGroupbox:Resize()
@@ -9838,7 +9834,9 @@ function Library:CreateWindow(...)
 
         local TabButtonLabelStroke = TabButtonLabel:FindFirstChildOfClass("UIStroke")
         if TabButtonLabelStroke then
-            TabButtonLabelStroke:Destroy()
+            TabButtonLabelStroke.Color = Color3.new(0, 0, 0)
+            TabButtonLabelStroke.Thickness = 1
+            TabButtonLabelStroke.Transparency = 0
         end
 
         local function ResizeTabButton()
@@ -10224,7 +10222,8 @@ end
                 BackgroundColor3 = Library.BackgroundColor;
                 BorderColor3 = Library.OutlineColor;
                 BorderMode = Enum.BorderMode.Inset;
-                Size = UDim2.new(1, 0, 1, 0);
+                Position = UDim2.new(0, 0, 0, 20);
+                Size = UDim2.new(1, 0, 1, -20);
                 ZIndex = 4;
                 Parent = BoxOuter;
             })
@@ -10237,9 +10236,10 @@ end
             local Highlight = Library:Create("Frame", {
                 BackgroundColor3 = Library.AccentColor;
                 BorderSizePixel = 0;
-                Size = UDim2.new(1, 0, 0, 20);
+                Position = UDim2.new(0, 1, 0, 1);
+                Size = UDim2.new(1, -2, 0, 19);
                 ZIndex = 4;
-                Parent = BoxInner;
+                Parent = BoxOuter;
             })
 
             Library:AddToRegistry(Highlight, {
@@ -10249,10 +10249,10 @@ end
             local TitleOutline = Library:Create("Frame", {
                 BackgroundColor3 = Library.OutlineColor;
                 BorderSizePixel = 0;
-                Position = UDim2.new(0, 0, 0, 20);
-                Size = UDim2.new(1, 0, 0, 1);
+                Position = UDim2.new(0, 1, 0, 20);
+                Size = UDim2.new(1, -2, 0, 1);
                 ZIndex = 5;
-                Parent = BoxInner;
+                Parent = BoxOuter;
             })
 
             Library:AddToRegistry(TitleOutline, {
@@ -10260,27 +10260,19 @@ end
             })
 
             Library:CreateLabel({
-                Size = UDim2.new(1, 0, 0, 18);
+                Size = UDim2.new(1, -8, 0, 18);
                 Position = UDim2.new(0, 4, 0, 2);
                 TextSize = 14;
                 Text = Info.Name;
                 TextXAlignment = Enum.TextXAlignment.Left;
-                ZIndex = 5;
-                Parent = BoxInner;
-            })
-
-            local Container = Library:Create("Frame", {
-                BackgroundTransparency = 1;
-                Position = UDim2.new(0, 4, 0, 20);
-                Size = UDim2.new(1, -4, 1, -20);
-                ZIndex = 1;
-                Parent = BoxInner;
+                ZIndex = 6;
+                Parent = BoxOuter;
             })
 
             Library:Create("UIListLayout", {
                 FillDirection = Enum.FillDirection.Vertical;
                 SortOrder = Enum.SortOrder.LayoutOrder;
-                Parent = Container;
+                Parent = BoxInner;
             })
 
             function Groupbox:Resize()
@@ -10295,7 +10287,7 @@ end
                 BoxOuter.Size = UDim2.new(1, -2 * DPIScale, 0, (20 * DPIScale + Size) + 2 + 2)
             end
 
-            Groupbox.Container = Container
+            Groupbox.Container = BoxInner
             setmetatable(Groupbox, BaseGroupbox)
 
             Groupbox:AddBlank(6)
