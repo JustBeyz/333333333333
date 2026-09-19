@@ -2960,7 +2960,7 @@ do
             BackgroundColor3 = ColorPicker.Value;
             BorderColor3 = Library:GetDarkerColor(ColorPicker.Value);
             BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(0, 28, 0, 15);
+            Size = UDim2.new(0, 15, 0, 15);
             ZIndex = 6;
             Parent = ToggleLabel;
         })
@@ -2969,7 +2969,7 @@ do
         -- local CheckerFrame = 
         Library:Create("ImageLabel", {
             BorderSizePixel = 0;
-            Size = UDim2.new(0, 27, 0, 13);
+            Size = UDim2.new(0, 13, 0, 13);
             ZIndex = 5;
             Image = CustomImageManager.GetAsset("Checker");
             Visible = not not Info.Transparency;
@@ -5030,6 +5030,8 @@ do
         local ToggleOuter = Library:Create("Frame", {
             BackgroundColor3 = Color3.new(0, 0, 0);
             BorderColor3 = Color3.new(0, 0, 0);
+            AnchorPoint = Vector2.new(1, 0);
+            Position = UDim2.new(1, 0, 0, 0);
             Size = UDim2.new(0, 13, 0, 13);
             Visible = Toggle.Visible;
             ZIndex = 5;
@@ -5056,7 +5058,7 @@ do
 
         local ToggleLabel = Library:CreateLabel({
             Size = UDim2.new(1, -19, 0, 11); -- size of toggle box (13) + size offset of previous layout (6)
-            Position = UDim2.new(0, 19, 0, 0);
+            Position = UDim2.new(0, 0, 0, 0);
             TextSize = 14;
             Text = Info.Text;
             TextXAlignment = Enum.TextXAlignment.Left;
@@ -5075,9 +5077,10 @@ do
 
         local ToggleRegion = Library:Create("Frame", {
             BackgroundTransparency = 1;
-            Size = UDim2.new(0, 170, 1, 0);
+            Position = UDim2.new(0, 0, 0, 0);
+            Size = UDim2.new(1, 0, 1, 0);
             ZIndex = 8;
-            Parent = ToggleOuter;
+            Parent = ToggleContainer;
         })
 
         Library:OnHighlight(ToggleRegion, ToggleOuter,
@@ -9131,7 +9134,7 @@ function Library:CreateWindow(...)
     })
     LibraryMainOuterFrame = Outer
     Library:RegisterGlowTarget(Outer)
-    Library:MakeDraggable(Outer, 4, true)
+    Library:MakeDraggable(Outer, 25, true)
     if WindowInfo.Resizable then Library:MakeResizable(Outer, Library.MinSize) end
 
     local MainSectionOuter = Library:Create("Frame", {
@@ -9150,6 +9153,59 @@ function Library:CreateWindow(...)
         BorderColor3 = "OutlineColor";
     })
 
+    local WindowTitleContainer = Library:Create("Frame", {
+        BackgroundColor3 = Library.AccentColor;
+        BorderSizePixel = 0;
+        Position = UDim2.new(0, 0, 0, 0);
+        Size = UDim2.new(1, 0, 0, 25);
+        ZIndex = 3;
+        Parent = MainSectionOuter;
+    })
+
+    Library:AddToRegistry(WindowTitleContainer, {
+        BackgroundColor3 = "AccentColor";
+    })
+
+    Library:Create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal;
+        VerticalAlignment = Enum.VerticalAlignment.Center;
+        SortOrder = Enum.SortOrder.LayoutOrder;
+        Parent = WindowTitleContainer;
+    })
+
+    local WindowTitlePrefix = Library:CreateLabel({
+        AutomaticSize = Enum.AutomaticSize.X;
+        LayoutOrder = 1;
+        Size = UDim2.new(0, 0, 0, 25);
+        Text = "$$ ";
+        TextColor3 = Library.FontColor;
+        TextXAlignment = Enum.TextXAlignment.Left;
+        ZIndex = 4;
+        Parent = WindowTitleContainer;
+    })
+
+    local WindowLabel = Library:CreateLabel({
+        AutomaticSize = Enum.AutomaticSize.X;
+        LayoutOrder = 2;
+        Size = UDim2.new(0, 0, 0, 25);
+        Text = WindowInfo.Title or "";
+        TextColor3 = Library.FontColor;
+        TextXAlignment = Enum.TextXAlignment.Left;
+        ZIndex = 4;
+        Parent = WindowTitleContainer;
+    })
+
+    local WindowTitleSuffix = Library:CreateLabel({
+        AutomaticSize = Enum.AutomaticSize.X;
+        LayoutOrder = 3;
+        Size = UDim2.new(0, 0, 0, 25);
+        Text = " $$";
+        TextColor3 = Library.FontColor;
+        TextXAlignment = Enum.TextXAlignment.Left;
+        ZIndex = 4;
+        Parent = WindowTitleContainer;
+    })
+
     local TabArea = Library:Create("ScrollingFrame", {
         ScrollingDirection = Enum.ScrollingDirection.X;
         CanvasSize = UDim2.new(0, 0, 2, 0);
@@ -9157,7 +9213,7 @@ function Library:CreateWindow(...)
         AutomaticCanvasSize = Enum.AutomaticSize.XY;
         ScrollBarThickness = 0;
         BackgroundTransparency = 1;
-        Position = UDim2.new(0, 8 - WindowInfo.TabPadding, 0, 4);
+        Position = UDim2.new(0, 8 - WindowInfo.TabPadding, 0, 29);
         Size = UDim2.new(1, -10, 0, 26);
         ZIndex = 1;
         Parent = MainSectionOuter;
@@ -9194,8 +9250,8 @@ function Library:CreateWindow(...)
         BackgroundColor3 = Library.MainColor;
         BorderColor3 = Library.OutlineColor;
         ClipsDescendants = true;
-        Position = UDim2.new(0, 8, 0, 30);
-        Size = UDim2.new(1, -16, 1, -38);
+        Position = UDim2.new(0, 8, 0, 55);
+        Size = UDim2.new(1, -16, 1, -63);
         ZIndex = 2;
         Parent = MainSectionOuter;
     })
@@ -9234,6 +9290,7 @@ function Library:CreateWindow(...)
     function Window:SetWindowTitle(Title)
         if typeof(Title) == "string" then
             Window.Title = Title
+            WindowLabel.Text = Window.Title
         end
     end
 
@@ -10189,6 +10246,19 @@ end
                 BackgroundColor3 = "AccentColor";
             })
 
+            local TitleOutline = Library:Create("Frame", {
+                BackgroundColor3 = Library.OutlineColor;
+                BorderSizePixel = 0;
+                Position = UDim2.new(0, 0, 0, 20);
+                Size = UDim2.new(1, 0, 0, 1);
+                ZIndex = 5;
+                Parent = BoxInner;
+            })
+
+            Library:AddToRegistry(TitleOutline, {
+                BackgroundColor3 = "OutlineColor";
+            })
+
             Library:CreateLabel({
                 Size = UDim2.new(1, 0, 0, 18);
                 Position = UDim2.new(0, 4, 0, 2);
@@ -10228,7 +10298,7 @@ end
             Groupbox.Container = Container
             setmetatable(Groupbox, BaseGroupbox)
 
-            Groupbox:AddBlank(4)
+            Groupbox:AddBlank(6)
             Groupbox:Resize()
 
             Tab.Groupboxes[Info.Name] = Groupbox
