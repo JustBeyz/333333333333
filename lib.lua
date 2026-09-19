@@ -785,9 +785,6 @@ function Library:ApplyFontByName(Instance, Name)
         pcall(function()
             Instance.FontFace = FontFace
         end)
-        pcall(function()
-            Instance.Font = Enum.Font.Code
-        end)
         return true
     end
 
@@ -9133,106 +9130,19 @@ function Library:CreateWindow(...)
     })
     LibraryMainOuterFrame = Outer
     Library:RegisterGlowTarget(Outer)
-    Library:MakeDraggable(Outer, 25, true)
+    Library:MakeDraggable(Outer, 4, true)
     if WindowInfo.Resizable then Library:MakeResizable(Outer, Library.MinSize) end
 
-    local Inner = Library:Create("Frame", {
-        BackgroundColor3 = Library.MainColor;
-        BorderColor3 = Library.AccentColor;
-        BorderMode = Enum.BorderMode.Inset;
+    local MainSectionOuter = Library:Create("Frame", {
+        BackgroundColor3 = Library.BackgroundColor;
+        BorderSizePixel = 0;
         Position = UDim2.new(0, 1, 0, 1);
         Size = UDim2.new(1, -2, 1, -2);
         ZIndex = 1;
         Parent = Outer;
     })
 
-    Library:AddToRegistry(Inner, {
-        BackgroundColor3 = "MainColor";
-        BorderColor3 = "AccentColor";
-    })
-
-    local WindowTitleContainer = Library:Create("Frame", {
-        BackgroundTransparency = 1;
-        Position = UDim2.new(0, 7, 0, 0);
-        Size = UDim2.new(1, -14, 0, 25);
-        ZIndex = 1;
-        Parent = Inner;
-    })
-
-    Library:Create("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal;
-        VerticalAlignment = Enum.VerticalAlignment.Center;
-        SortOrder = Enum.SortOrder.LayoutOrder;
-        Parent = WindowTitleContainer;
-    })
-
-    local WindowTitlePrefix = Library:CreateLabel({
-        AutomaticSize = Enum.AutomaticSize.X;
-        LayoutOrder = 1;
-        Size = UDim2.new(0, 0, 0, 25);
-        Text = "$$ ";
-        TextColor3 = Library.AccentColor;
-        TextXAlignment = Enum.TextXAlignment.Left;
-        ZIndex = 1;
-        Parent = WindowTitleContainer;
-    })
-
-    Library:RemoveFromRegistry(WindowTitlePrefix)
-    Library:AddToRegistry(WindowTitlePrefix, {
-        TextColor3 = "AccentColor";
-    })
-
-    local WindowLabel = Library:CreateLabel({
-        AutomaticSize = Enum.AutomaticSize.X;
-        LayoutOrder = 2;
-        Size = UDim2.new(0, 0, 0, 25);
-        Text = WindowInfo.Title or "";
-        TextXAlignment = Enum.TextXAlignment.Left;
-        ZIndex = 1;
-        Parent = WindowTitleContainer;
-    })
-
-    local WindowTitleSuffix = Library:CreateLabel({
-        AutomaticSize = Enum.AutomaticSize.X;
-        LayoutOrder = 3;
-        Size = UDim2.new(0, 0, 0, 25);
-        Text = " $$";
-        TextColor3 = Library.AccentColor;
-        TextXAlignment = Enum.TextXAlignment.Left;
-        ZIndex = 1;
-        Parent = WindowTitleContainer;
-    })
-
-    Library:RemoveFromRegistry(WindowTitleSuffix)
-    Library:AddToRegistry(WindowTitleSuffix, {
-        TextColor3 = "AccentColor";
-    })
-
-    local MainSectionOuter = Library:Create("Frame", {
-        BackgroundColor3 = Library.BackgroundColor;
-        BorderColor3 = Library.OutlineColor;
-        Position = UDim2.new(0, 8, 0, 25);
-        Size = UDim2.new(1, -16, 1, -33);
-        ZIndex = 1;
-        Parent = Inner;
-    })
-
     Library:AddToRegistry(MainSectionOuter, {
-        BackgroundColor3 = "BackgroundColor";
-        BorderColor3 = "OutlineColor";
-    })
-
-    local MainSectionInner = Library:Create("Frame", {
-        BackgroundColor3 = Library.BackgroundColor;
-        BorderColor3 = Color3.new(0, 0, 0);
-        BorderMode = Enum.BorderMode.Inset;
-        Position = UDim2.new(0, 0, 0, 0);
-        Size = UDim2.new(1, 0, 1, 0);
-        ZIndex = 1;
-        Parent = MainSectionOuter;
-    })
-
-    Library:AddToRegistry(MainSectionInner, {
         BackgroundColor3 = "BackgroundColor";
     })
 
@@ -9246,7 +9156,7 @@ function Library:CreateWindow(...)
         Position = UDim2.new(0, 8 - WindowInfo.TabPadding, 0, 4);
         Size = UDim2.new(1, -10, 0, 26);
         ZIndex = 1;
-        Parent = MainSectionInner;
+        Parent = MainSectionOuter;
     })
 
     local TabListLayout = Library:Create("UIListLayout", {
@@ -9283,7 +9193,7 @@ function Library:CreateWindow(...)
         Position = UDim2.new(0, 8, 0, 30);
         Size = UDim2.new(1, -16, 1, -38);
         ZIndex = 2;
-        Parent = MainSectionInner;
+        Parent = MainSectionOuter;
     })
     
     local InnerVideoBackground = Library:Create("VideoFrame", {
@@ -9320,7 +9230,6 @@ function Library:CreateWindow(...)
     function Window:SetWindowTitle(Title)
         if typeof(Title) == "string" then
             Window.Title = Title
-            WindowLabel.Text = Window.Title
         end
     end
 
@@ -9846,26 +9755,30 @@ function Library:CreateWindow(...)
         local TabButtonWidth = select(1, Library:GetTextBounds(Tab.Name, Library.Font, Library.FontSize))
 
         local TabButton = Library:Create("Frame", {
-            BackgroundColor3 = Library.BackgroundColor;
-            BorderColor3 = Library.OutlineColor;
+            BackgroundTransparency = 1;
+            BorderSizePixel = 0;
             Size = UDim2.new(0, (TabButtonWidth / DPIScale) + 12, 0.85, 0);
             LayoutOrder = Tab.Order;
             ZIndex = 1;
             Parent = TabArea;
         })
 
-        Library:AddToRegistry(TabButton, {
-            BackgroundColor3 = "BackgroundColor";
-            BorderColor3 = "OutlineColor";
-        })
-
         local TabButtonLabel = Library:CreateLabel({
             Position = UDim2.new(0, 0, 0, 0);
             Size = UDim2.new(1, 0, 1, -1);
+            TextColor3 = Library.FontColor;
             Text = Tab.Name;
+            TextXAlignment = Enum.TextXAlignment.Center;
+            TextYAlignment = Enum.TextYAlignment.Center;
+            TextStrokeTransparency = 1;
             ZIndex = 1;
             Parent = TabButton;
         })
+
+        local TabButtonLabelStroke = TabButtonLabel:FindFirstChildOfClass("UIStroke")
+        if TabButtonLabelStroke then
+            TabButtonLabelStroke:Destroy()
+        end
 
         local function ResizeTabButton()
             TabButton.Size = UDim2.new(0, TabButtonLabel.TextBounds.X + (12 * DPIScale), 0.85, 0)
@@ -9873,20 +9786,6 @@ function Library:CreateWindow(...)
 
         TabButtonLabel:GetPropertyChangedSignal("TextBounds"):Connect(ResizeTabButton)
         task.defer(ResizeTabButton)
-
-        local Blocker = Library:Create("Frame", {
-            BackgroundColor3 = Library.MainColor;
-            BorderSizePixel = 0;
-            Position = UDim2.new(0, 0, 1, 0);
-            Size = UDim2.new(1, 0, 0, 1);
-            BackgroundTransparency = 1;
-            ZIndex = 3;
-            Parent = TabButton;
-        })
-
-        Library:AddToRegistry(Blocker, {
-            BackgroundColor3 = "MainColor";
-        })
 
         local TabFrame = Library:Create("Frame", {
             Name = "TabFrame",
@@ -10157,9 +10056,8 @@ end
         end
 
         local function SetButtonSelected(Selected)
-            Blocker.BackgroundTransparency = Selected and 0 or 1
-            TabButton.BackgroundColor3 = Selected and Library.MainColor or Library.BackgroundColor
-            Library.RegistryMap[TabButton].Properties.BackgroundColor3 = Selected and "MainColor" or "BackgroundColor"
+            TabButtonLabel.TextColor3 = Selected and Library.AccentColor or Library.FontColor
+            Library.RegistryMap[TabButtonLabel].Properties.TextColor3 = Selected and "AccentColor" or "FontColor"
         end
 
         function Tab:ShowTab()
@@ -10277,8 +10175,8 @@ end
             local Highlight = Library:Create("Frame", {
                 BackgroundColor3 = Library.AccentColor;
                 BorderSizePixel = 0;
-                Size = UDim2.new(1, 0, 0, 2);
-                ZIndex = 5;
+                Size = UDim2.new(1, 0, 0, 20);
+                ZIndex = 4;
                 Parent = BoxInner;
             })
 
